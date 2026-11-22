@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">FLIR ONE Pro App</string>
+    <string name="hint">Етап 0: діагностика USB. Підключіть камеру, дозвольте доступ у діалозі системи й натисніть «Сканувати». Звіт зберігається у файл застосунку.</string>
+    <string name="scan">Сканувати</string>
+    <string name="copy">Копіювати звіт</string>
+    <string name="copied">Звіт скопійовано</string>
+</resources>
