@@ -34,6 +34,18 @@
             android:text="@string/copy" />
     </LinearLayout>
 
+    <Button
+        android:id="@+id/btnLive"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/live" />
+
+    <Button
+        android:id="@+id/btnDemo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/demo" />
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"

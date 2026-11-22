@@ -33,6 +33,15 @@
                 android:resource="@xml/device_filter" />
         </activity>
 
+        <activity
+            android:name=".StreamActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density"
+            android:exported="false"
+            android:label="@string/live"
+            android:screenOrientation="fullUser"
+            android:theme="@style/Theme.FLIRONEProApp.Stream"
+            android:windowSoftInputMode="adjustPan" />
+
     </application>
 
 </manifest>

@@ -66,12 +66,19 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        DiagLog.init(this)
         usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
         reportView = findViewById(R.id.reportView)
 
         findViewById<Button>(R.id.btnScan).setOnClickListener {
             permissionDenied.clear()
             scan()
+        }
+        findViewById<Button>(R.id.btnLive).setOnClickListener {
+            startActivity(Intent(this, StreamActivity::class.java))
+        }
+        findViewById<Button>(R.id.btnDemo).setOnClickListener {
+            startActivity(Intent(this, StreamActivity::class.java).putExtra(StreamActivity.EXTRA_DEMO, true))
         }
         findViewById<Button>(R.id.btnCopy).setOnClickListener {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -137,8 +144,11 @@ class MainActivity : AppCompatActivity() {
         val text = sb.toString()
         reportView.text = text
         Log.i(TAG, text)
-        runCatching { File(filesDir, REPORT_FILE).writeText(text) }
-            .onFailure { Log.w(TAG, "Не вдалося зберегти звіт", it) }
+        // Не затираємо звіт з пристроєм порожнім скануванням (наприклад, після відключення камери).
+        if (devices.isNotEmpty()) {
+            runCatching { File(filesDir, REPORT_FILE).writeText(text) }
+                .onFailure { Log.w(TAG, "Не вдалося зберегти звіт", it) }
+        }
     }
 
     private fun requestPermission(device: UsbDevice) {

@@ -4,4 +4,15 @@
     <string name="scan">Сканувати</string>
     <string name="copy">Копіювати звіт</string>
     <string name="copied">Звіт скопійовано</string>
+    <string name="live">Живий перегляд</string>
+    <string name="demo">Демо (збережені кадри, без камери)</string>
+
+    <string name="mode">Режим</string>
+    <string name="palette">Палітра</string>
+    <string name="photo">Фото</string>
+    <string name="video">● Відео</string>
+    <string name="menu">Меню</string>
+    <string name="cal_add">Додати еталон</string>
+    <string name="cal_reset">Скинути</string>
+    <string name="cal_close">Закрити</string>
 </resources>
