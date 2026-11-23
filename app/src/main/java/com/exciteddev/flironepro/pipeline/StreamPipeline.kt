@@ -14,6 +14,7 @@ import com.exciteddev.flironepro.render.UiTexts
 import com.exciteddev.flironepro.render.overlayTexts
 import com.exciteddev.flironepro.settings.AppSettings
 import com.exciteddev.flironepro.usb.FlirCamera
+import kotlinx.coroutines.CoroutineScope
 
 /**
  * The data side of the live screen: the camera (or the demo player), the frame processor, the radiometric model and the
@@ -22,8 +23,12 @@ import com.exciteddev.flironepro.usb.FlirCamera
  *
  * It does not belong to a screen: the screen's picture view is [attach]ed to it for as long as the screen exists, and the
  * pipeline goes on (without showing anything) while there is none, e.g. while the screen is being recreated.
+ *
+ * [scope] runs the work that has to be finished in the background whatever happens to the screen (closing the video file); its
+ * jobs must not be cancelled half way, so it must outlive the stream.
  */
-class StreamPipeline(private val context: Context, private val settings: AppSettings) : FlirCamera.Listener {
+class StreamPipeline(private val context: Context, private val settings: AppSettings, internal val scope: CoroutineScope) :
+    FlirCamera.Listener {
 
     /** Called (on the processing thread) when a photo was saved: the file name, or null if saving failed. */
     var onPhotoSaved: (String?) -> Unit = {}

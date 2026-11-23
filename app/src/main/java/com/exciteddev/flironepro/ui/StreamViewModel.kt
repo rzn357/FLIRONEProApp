@@ -6,6 +6,9 @@ import android.hardware.usb.UsbManager
 import androidx.lifecycle.AndroidViewModel
 import com.exciteddev.flironepro.pipeline.StreamPipeline
 import com.exciteddev.flironepro.settings.AppSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Everything of the live screen that has to outlive the screen itself: the user's settings, the stream (camera, processing,
@@ -20,7 +23,14 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
     val settings = AppSettings(application)
     val runMode = RunMode()
     val status = StreamStatus()
-    val pipeline = StreamPipeline(application, settings)
+
+    /**
+     * Background work of the stream that must be finished even when the screen is gone, such as closing the video file. It is
+     * deliberately not the [androidx.lifecycle.viewModelScope]: that one is cancelled when the model is cleared, which would
+     * leave a recording that is just being stopped without its end.
+     */
+    private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    val pipeline = StreamPipeline(application, settings, background)
     val session = StreamSession(application, application.getSystemService(Context.USB_SERVICE) as UsbManager, pipeline, runMode, status)
 
     init {

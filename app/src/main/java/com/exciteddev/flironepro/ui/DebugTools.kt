@@ -6,10 +6,14 @@ import android.os.Bundle
 import android.os.SystemClock
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.lifecycle.lifecycleScope
 import com.exciteddev.flironepro.debug.DiagLog
 import com.exciteddev.flironepro.pipeline.StreamPipeline
 import com.exciteddev.flironepro.util.isDebuggable
 import com.exciteddev.flironepro.util.setAppLanguage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * How this launch of the screen is to run. The demo player and the self-test are developer tools of debuggable builds only;
@@ -73,20 +77,20 @@ class DebugCommands(private val activity: AppCompatActivity, private val pipelin
             intent.removeExtra(EXTRA_SEND_JSON)
             val gap = intent.getIntExtra(EXTRA_SEND_GAP, DEFAULT_GAP_MS).toLong()
             val commands = raw.split("@@").map { it.trim() }.filter { it.isNotEmpty() }
-            Thread({ sendWhenStreaming(commands, gap) }, "flir-debug-send").start()
+            activity.lifecycleScope.launch(Dispatchers.IO) { sendWhenStreaming(commands, gap) }
         }
     }
 
-    private fun sendWhenStreaming(commands: List<String>, gapMs: Long) {
+    private suspend fun sendWhenStreaming(commands: List<String>, gapMs: Long) {
         val end = SystemClock.elapsedRealtime() + WAIT_FOR_FRAMES_MS
-        while (SystemClock.elapsedRealtime() < end && !isStreaming()) Thread.sleep(POLL_MS)
+        while (SystemClock.elapsedRealtime() < end && !isStreaming()) delay(POLL_MS)
         val cam = pipeline.camera
         if (cam == null) {
             DiagLog.log("[debug] no camera to send to")
         } else {
             for (command in commands) {
                 DiagLog.log("[debug] sent $command -> ${cam.sendJson(command)}")
-                Thread.sleep(gapMs)
+                delay(gapMs)
             }
         }
     }
