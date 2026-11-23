@@ -2,6 +2,39 @@
 
 An Android app that shows the live picture of a FLIR ONE Pro thermal camera connected to the phone's USB port.
 
+## License
+
+Copyright (c) 2026 Excited Dev.
+
+The source code is available under the [PolyForm Noncommercial License 1.0.0](LICENSE)
+(SPDX: `PolyForm-Noncommercial-1.0.0`). In short:
+
+- You may use, study, change and share the code for **noncommercial purposes**: personal use, hobby projects, research,
+  education, and use by charities, schools, public research, public safety or health bodies, and governments.
+- You may **not** use it for commercial purposes, for example to sell it, to include it in a paid product or service, or
+  to use it for the profit of a company.
+- If you share the code, you must include the `LICENSE` file (with its `Required Notice:` line).
+
+This is a source-available license, not an open-source license as defined by the OSI. The summary above is only a
+help; the text in [LICENSE](LICENSE) is what counts.
+
+### Third-party software
+
+The app uses AndroidX and Material Components (Apache License 2.0) as Gradle dependencies; they are not part of this
+repository and keep their own licenses. A build of the app that contains them must follow the terms of those licenses.
+
+### Trademarks and no affiliation
+
+FLIR, FLIR ONE and Lepton are trademarks of their owners (Teledyne FLIR LLC). This is an independent project. It is not
+affiliated with, authorized by or endorsed by Teledyne FLIR. It contains no FLIR SDK code; the camera protocol was
+implemented independently by observing the behavior of a camera owned by the author. The names are used only to say which
+hardware the app works with.
+
+### No warranty
+
+The software comes as is, without any warranty. The app is not a certified measuring instrument: temperatures it shows
+are approximate and must not be used for safety-critical decisions.
+
 ## Code quality checks
 
 Two linters check the Kotlin code:
