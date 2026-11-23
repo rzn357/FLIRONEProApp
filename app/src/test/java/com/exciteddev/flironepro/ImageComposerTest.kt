@@ -5,8 +5,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ImageComposerTest {
-    private val W = ImageComposer.OUT_W
-    private val H = ImageComposer.OUT_H
+    private val w = ImageComposer.OUT_W
+    private val h = ImageComposer.OUT_H
 
     private fun gray() = Palettes.lut(Palette.GRAY)
     private fun r(p: Int) = (p shr 16) and 0xFF
@@ -17,7 +17,7 @@ class ImageComposerTest {
     @Test
     fun uniformThermalGivesUniformImage() {
         val raw = IntArray(160 * 120) { 3000 }
-        val out = IntArray(W * H)
+        val out = IntArray(w * h)
         ImageComposer.thermalToArgb(raw, 2900.0, 3100.0, gray(), out)
         assertTrue(out.all { it == out[0] })
         assertNear(127, r(out[0]), 2)
@@ -26,75 +26,75 @@ class ImageComposerTest {
     @Test
     fun horizontalGradientIsMonotonicAndSmooth() {
         val raw = IntArray(160 * 120) { 1000 + (it % 160) * 10 }
-        val out = IntArray(W * H)
+        val out = IntArray(w * h)
         ImageComposer.thermalToArgb(raw, 1000.0, 2590.0, gray(), out)
         var prev = -1
-        for (x in 0 until W) {
-            val v = r(out[100 * W + x])
+        for (x in 0 until w) {
+            val v = r(out[100 * w + x])
             assertTrue("x=$x v=$v prev=$prev", v >= prev)
             assertTrue("the jump between neighbouring pixels must be small", prev < 0 || v - prev <= 3)
             prev = v
         }
-        assertNear(0, r(out[100 * W]), 3)
-        assertNear(255, r(out[100 * W + W - 1]), 3)
+        assertNear(0, r(out[100 * w]), 3)
+        assertNear(255, r(out[100 * w + w - 1]), 3)
     }
 
     @Test
     fun valuesOutsideRangeAreClamped() {
         val raw = IntArray(160 * 120) { if (it % 2 == 0) 0 else 60000 }
-        val out = IntArray(W * H)
+        val out = IntArray(w * h)
         ImageComposer.thermalToArgb(raw, 1000.0, 2000.0, gray(), out)
         assertTrue(out.all { r(it) in 0..255 })
     }
 
     @Test
     fun identityAlignmentKeepsLuma() {
-        val src = IntArray(W * H) { (it % W) * 255 / W }
-        val out = IntArray(W * H)
-        ImageComposer.alignLuma(src, W, H, Alignment(1f, 0f, 0f), out)
-        for (i in intArrayOf(5 * W + 10, 240 * W + 320, 400 * W + 600)) assertNear(src[i], out[i], 2)
+        val src = IntArray(w * h) { (it % w) * 255 / w }
+        val out = IntArray(w * h)
+        ImageComposer.alignLuma(src, w, h, Alignment(1f, 0f, 0f), out)
+        for (i in intArrayOf(5 * w + 10, 240 * w + 320, 400 * w + 600)) assertNear(src[i], out[i], 2)
     }
 
     @Test
     fun alignmentZoomsIntoCentralPart() {
         // source: the left half is black, the right half is white; the thermal frame covers the central part
-        val src = IntArray(W * H) { if (it % W < W / 2) 0 else 255 }
-        val out = IntArray(W * H)
-        ImageComposer.alignLuma(src, W, H, Alignment(0.5f, 0f, 0f), out)
-        assertNear(0, out[240 * W + W / 2 - 40], 1)
-        assertNear(255, out[240 * W + W / 2 + 40], 1)
+        val src = IntArray(w * h) { if (it % w < w / 2) 0 else 255 }
+        val out = IntArray(w * h)
+        ImageComposer.alignLuma(src, w, h, Alignment(0.5f, 0f, 0f), out)
+        assertNear(0, out[240 * w + w / 2 - 40], 1)
+        assertNear(255, out[240 * w + w / 2 + 40], 1)
         // near the frame edges we still get the matching sides of the boundary
-        assertNear(0, out[240 * W + 10], 1)
-        assertNear(255, out[240 * W + W - 10], 1)
+        assertNear(0, out[240 * w + 10], 1)
+        assertNear(255, out[240 * w + w - 10], 1)
     }
 
     @Test
     fun alignmentShiftMovesContent() {
-        val src = IntArray(W * H) { if (it % W < W / 2) 0 else 255 }
-        val out = IntArray(W * H)
-        ImageComposer.alignLuma(src, W, H, Alignment(1f, 0.25f, 0f), out)
+        val src = IntArray(w * h) { if (it % w < w / 2) 0 else 255 }
+        val out = IntArray(w * h)
+        ImageComposer.alignLuma(src, w, h, Alignment(1f, 0.25f, 0f), out)
         // dx = +0.25: the visible zone is shifted to the right, the boundary (0.5) is now at u = 0.25
-        assertNear(0, out[240 * W + (0.25 * W).toInt() - 20], 1)
-        assertNear(255, out[240 * W + (0.25 * W).toInt() + 20], 1)
+        assertNear(0, out[240 * w + (0.25 * w).toInt() - 20], 1)
+        assertNear(255, out[240 * w + (0.25 * w).toInt() + 20], 1)
     }
 
     @Test
     fun highPassIsZeroOnFlatAndNonZeroAtEdge() {
-        val luma = IntArray(W * H) { if (it % W < W / 2) 40 else 200 }
-        val hp = IntArray(W * H)
-        ImageComposer.highPass(luma, W, H, ImageComposer.Scratch(), hp)
-        assertEquals(0, hp[240 * W + 50])
-        assertEquals(0, hp[240 * W + W - 50])
-        assertTrue(Math.abs(hp[240 * W + W / 2]) > 5 || Math.abs(hp[240 * W + W / 2 - 1]) > 5)
+        val luma = IntArray(w * h) { if (it % w < w / 2) 40 else 200 }
+        val hp = IntArray(w * h)
+        ImageComposer.highPass(luma, w, h, ImageComposer.Scratch(), hp)
+        assertEquals(0, hp[240 * w + 50])
+        assertEquals(0, hp[240 * w + w - 50])
+        assertTrue(Math.abs(hp[240 * w + w / 2]) > 5 || Math.abs(hp[240 * w + w / 2 - 1]) > 5)
         // the sign differs on the two sides of the edge (darker / lighter)
-        assertTrue(hp[240 * W + W / 2 - 2] < 0)
-        assertTrue(hp[240 * W + W / 2 + 1] > 0)
+        assertTrue(hp[240 * w + w / 2 - 2] < 0)
+        assertTrue(hp[240 * w + w / 2 + 1] > 0)
     }
 
     @Test
     fun msxBrightensAndDarkensAroundEdges() {
-        val thermal = IntArray(W * H) { 0xFF808080.toInt() }
-        val hp = IntArray(W * H)
+        val thermal = IntArray(w * h) { 0xFF808080.toInt() }
+        val hp = IntArray(w * h)
         hp[0] = 50
         hp[1] = -50
         hp[2] = 1 // inside the dead zone - unchanged
@@ -107,17 +107,17 @@ class ImageComposerTest {
 
     @Test
     fun msxClampsColorChannels() {
-        val thermal = IntArray(W * H) { 0xFFFFFFFF.toInt() }
-        val hp = IntArray(W * H) { 200 }
+        val thermal = IntArray(w * h) { 0xFFFFFFFF.toInt() }
+        val hp = IntArray(w * h) { 200 }
         ImageComposer.applyMsx(thermal, hp, 3f)
         assertEquals(255, r(thermal[0]))
     }
 
     @Test
     fun boxBlurPreservesConstantAndMean() {
-        val src = IntArray(W * H) { 100 }
-        val dst = IntArray(W * H)
-        ImageComposer.boxBlur(src, dst, IntArray(W * H), W, H, 5)
+        val src = IntArray(w * h) { 100 }
+        val dst = IntArray(w * h)
+        ImageComposer.boxBlur(src, dst, IntArray(w * h), w, h, 5)
         assertTrue(dst.all { it == 100 })
     }
 

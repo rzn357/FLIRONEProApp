@@ -16,7 +16,7 @@ class FrameSample(
     val raw: IntArray?,
     /** true if the thermal content may be shown (the shutter is not closed for calibration). */
     val valid: Boolean,
-    val fpaK: Double?,
+    val fpaK: Double?
 )
 
 /** Averaged reading under the crosshair for calibration: S' (without the user offset) and the shutter's Φ of the anchor. */
@@ -32,15 +32,18 @@ class FrameProcessor(
     private val settings: AppSettings,
     private val radiometry: Radiometry,
     private val view: ThermalView,
-    private val texts: UiTexts,
+    private val texts: UiTexts
 ) : Thread("flir-render") {
 
     @Volatile var recorder: VideoRecorder? = null
+
     @Volatile var onPhotoSaved: ((String?) -> Unit)? = null
+
     @Volatile private var photoRequested = false
 
     private val lock = Object()
     private var latest: FrameSample? = null
+
     @Volatile private var running = true
 
     // Processing state (this thread only).
@@ -107,7 +110,9 @@ class FrameProcessor(
             if (dt > timeMax) timeMax = dt
             if (++timeCount == 60) {
                 DiagLog.log("Frame processing (mode ${settings.mode}): average ${timeSum / timeCount} ms, max $timeMax ms")
-                timeSum = 0; timeMax = 0; timeCount = 0
+                timeSum = 0
+                timeMax = 0
+                timeCount = 0
             }
         }
     }
@@ -124,7 +129,9 @@ class FrameProcessor(
             val lo = ex.minValue.toDouble()
             val hi = ex.maxValue.toDouble()
             if (!rangeInit) {
-                rangeLo = lo; rangeHi = hi; rangeInit = true
+                rangeLo = lo
+                rangeHi = hi
+                rangeInit = true
             } else {
                 rangeLo += 0.3 * (lo - rangeLo)
                 rangeHi += 0.3 * (hi - rangeHi)
@@ -210,8 +217,16 @@ class FrameProcessor(
             cross = Reading(crossU, crossV, crossT)
             recordCalSample(avg, crossT)
             extremes?.let { ex ->
-                hot = Reading((ex.maxX + 0.5f) / ThermalImage.W, (ex.maxY + 0.5f) / ThermalImage.H, radiometry.celsius(ex.maxValue.toDouble(), fpaK))
-                cold = Reading((ex.minX + 0.5f) / ThermalImage.W, (ex.minY + 0.5f) / ThermalImage.H, radiometry.celsius(ex.minValue.toDouble(), fpaK))
+                hot = Reading(
+                    (ex.maxX + 0.5f) / ThermalImage.W,
+                    (ex.maxY + 0.5f) / ThermalImage.H,
+                    radiometry.celsius(ex.maxValue.toDouble(), fpaK)
+                )
+                cold = Reading(
+                    (ex.minX + 0.5f) / ThermalImage.W,
+                    (ex.minY + 0.5f) / ThermalImage.H,
+                    radiometry.celsius(ex.minValue.toDouble(), fpaK)
+                )
             }
             loC = radiometry.celsius(lo, fpaK)
             hiC = radiometry.celsius(hi, fpaK)
@@ -226,7 +241,7 @@ class FrameProcessor(
             scaleHiC = hiC,
             waitingForAnchor = radiometry.effectiveAnchor(fpaK) == null,
             ffcActive = !s.valid,
-            emissivity = radiometry.emissivity,
+            emissivity = radiometry.emissivity
         )
     }
 
@@ -245,7 +260,7 @@ class FrameProcessor(
         CalSample(
             relative = calRing.map { it.relative }.average(),
             phiShutter = calRing.map { it.phiShutter }.average(),
-            tempC = calRing.mapNotNull { it.tempC }.takeIf { it.isNotEmpty() }?.average(),
+            tempC = calRing.mapNotNull { it.tempC }.takeIf { it.isNotEmpty() }?.average()
         )
     }
 
@@ -253,7 +268,9 @@ class FrameProcessor(
     private fun drawComposite(canvas: Canvas, w: Int, h: Int, content: Bitmap, overlay: OverlayState) {
         canvas.drawColor(Color.BLACK)
         val t = ViewTransform(w.toFloat(), h.toFloat(), content.width.toFloat() / content.height, settings.rotation, settings.mirror)
-        val src = floatArrayOf(0f, 0f, content.width.toFloat(), 0f, content.width.toFloat(), content.height.toFloat(), 0f, content.height.toFloat())
+        val cw = content.width.toFloat()
+        val ch = content.height.toFloat()
+        val src = floatArrayOf(0f, 0f, cw, 0f, cw, ch, 0f, ch)
         val corners = arrayOf(floatArrayOf(0f, 0f), floatArrayOf(1f, 0f), floatArrayOf(1f, 1f), floatArrayOf(0f, 1f))
         val dst = FloatArray(8)
         for (i in 0 until 4) {
@@ -264,7 +281,10 @@ class FrameProcessor(
         m.setPolyToPoly(src, 0, dst, 0, 4)
         canvas.drawBitmap(content, m, capturePaint)
         val painter = synchronized(painters) { painters.getOrPut(w) { OverlayPainter(w / 360f, texts) } }
-        painter.draw(canvas, t, overlay, settings.crossU, settings.crossV, settings.alignment, settings.showMarkers, settings.showScale, null)
+        painter.draw(
+            canvas, t, overlay, settings.crossU, settings.crossV, settings.alignment,
+            settings.showMarkers, settings.showScale, null
+        )
     }
 
     private fun savePhoto(content: Bitmap, overlay: OverlayState) {
