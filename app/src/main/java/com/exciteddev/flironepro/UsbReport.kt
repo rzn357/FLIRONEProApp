@@ -4,8 +4,8 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 
 /**
- * Будує текстовий опис USB-пристрою. Тільки читає: пристрій відкривається лише щоб прочитати
- * дескриптори, інтерфейси не захоплюються і нічого не надсилається.
+ * Builds a text description of a USB device. Read-only: the device is opened only to read the
+ * descriptors, no interfaces are claimed and nothing is sent.
  */
 object UsbReport {
 
@@ -19,34 +19,34 @@ object UsbReport {
         sb.appendLine("class=${UsbDescriptorParser.className(device.deviceClass)} sub=${device.deviceSubclass} proto=${device.deviceProtocol}")
 
         val granted = manager.hasPermission(device)
-        sb.appendLine("Дозвіл на доступ: ${if (granted) "є" else "немає"}")
+        sb.appendLine("Access permission: ${if (granted) "yes" else "no"}")
 
-        // Рядки та серійник Android віддає лише за наявності дозволу.
+        // Android provides the strings and the serial number only when permission is granted.
         if (granted) {
-            sb.appendLine("Виробник: ${device.manufacturerName}")
-            sb.appendLine("Продукт:  ${device.productName}")
-            sb.appendLine("Версія:   ${device.version}")
+            sb.appendLine("Manufacturer: ${device.manufacturerName}")
+            sb.appendLine("Product:      ${device.productName}")
+            sb.appendLine("Version:      ${device.version}")
         }
 
-        sb.appendLine("Конфігурацій (за Android API): ${device.configurationCount}, інтерфейсів поточної: ${device.interfaceCount}")
+        sb.appendLine("Configurations (Android API): ${device.configurationCount}, interfaces of the current one: ${device.interfaceCount}")
 
         if (!granted) {
-            sb.appendLine("(дескриптори недоступні без дозволу)")
+            sb.appendLine("(descriptors are unavailable without permission)")
             return sb.toString()
         }
 
         val connection = manager.openDevice(device)
         if (connection == null) {
-            sb.appendLine("!! openDevice() повернув null")
+            sb.appendLine("!! openDevice() returned null")
             return sb.toString()
         }
         try {
-            sb.appendLine("Серійний номер: ${runCatching { connection.serial }.getOrNull()}")
+            sb.appendLine("Serial number: ${runCatching { connection.serial }.getOrNull()}")
             val raw = connection.rawDescriptors
             if (raw == null) {
                 sb.appendLine("!! rawDescriptors = null")
             } else {
-                sb.appendLine("--- Дескриптори (${raw.size} байт) ---")
+                sb.appendLine("--- Descriptors (${raw.size} bytes) ---")
                 sb.appendLine(UsbDescriptorParser.parse(raw))
                 sb.appendLine("--- Hex ---")
                 sb.appendLine(UsbDescriptorParser.hex(raw, 0, raw.size))

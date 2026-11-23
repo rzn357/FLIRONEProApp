@@ -1,18 +1,157 @@
 <resources>
     <string name="app_name">FLIR ONE Pro App</string>
-    <string name="hint">Етап 0: діагностика USB. Підключіть камеру, дозвольте доступ у діалозі системи й натисніть «Сканувати». Звіт зберігається у файл застосунку.</string>
-    <string name="scan">Сканувати</string>
-    <string name="copy">Копіювати звіт</string>
-    <string name="copied">Звіт скопійовано</string>
-    <string name="live">Живий перегляд</string>
-    <string name="demo">Демо (збережені кадри, без камери)</string>
 
-    <string name="mode">Режим</string>
-    <string name="palette">Палітра</string>
-    <string name="photo">Фото</string>
-    <string name="video">● Відео</string>
-    <string name="menu">Меню</string>
-    <string name="cal_add">Додати еталон</string>
-    <string name="cal_reset">Скинути</string>
-    <string name="cal_close">Закрити</string>
+    <!-- Accessibility descriptions -->
+    <string name="cd_settings">Settings</string>
+    <string name="cd_photo">Take photo</string>
+    <string name="cd_video">Record video</string>
+    <string name="cd_video_stop">Stop recording</string>
+
+    <!-- Top bar -->
+    <string name="battery_fmt">%1$d%%</string>
+    <string name="fps_fmt">%1$s fps</string>
+
+    <!-- Status messages shown over the image -->
+    <string name="msg_no_camera">Camera not found.\nConnect the FLIR ONE Pro to the USB-C port.</string>
+    <string name="msg_wait_permission">Waiting for permission to access the camera…</string>
+    <string name="msg_permission_denied">Permission to access the camera was denied.</string>
+    <string name="msg_wait_first_frame">Waiting for the first frame…</string>
+    <string name="msg_camera_disconnected">Camera disconnected.</string>
+    <string name="msg_connection_lost">Connection to the camera was lost (unplugged?). Reconnect the camera and reopen the app.</string>
+    <string name="msg_demo_running">Demo: replaying saved frames</string>
+    <string name="msg_demo_no_frames">There are no saved frames for the demo.</string>
+    <string name="note_demo">DEMO: saved frames, temperatures are not accurate</string>
+    <string name="note_waiting_ffc">waiting for shutter calibration…</string>
+    <string name="note_ffc">shutter calibration…</string>
+    <string name="note_emissivity_fmt">ε %1$s</string>
+
+    <!-- Capture -->
+    <string name="toast_photo_saved_fmt">Photo saved: %1$s</string>
+    <string name="toast_photo_failed">Could not save the photo</string>
+    <string name="toast_video_saved_fmt">Video saved: %1$s</string>
+    <string name="toast_video_failed">Video was not saved (recording too short?)</string>
+    <string name="toast_video_start_failed">Could not start video recording</string>
+    <string name="toast_no_image">There is no image to save yet</string>
+    <string name="toast_raw_saved_fmt">Raw frame saved: %1$s</string>
+    <string name="toast_raw_failed">Could not save the frame</string>
+    <string name="toast_controls_hidden">Tap the screen to show the controls</string>
+
+    <!-- Settings panel -->
+    <string name="settings_title">Settings</string>
+    <string name="sec_display">Display mode</string>
+    <string name="sec_palette">Palette</string>
+    <string name="sec_temperature">Temperature</string>
+    <string name="sec_msx">MSX edges</string>
+    <string name="sec_image">Image</string>
+    <string name="sec_overlays">Overlays</string>
+    <string name="sec_language">Language</string>
+    <string name="sec_developer">Developer</string>
+
+    <string name="mode_msx">MSX (visible edges on thermal)</string>
+    <string name="mode_thermal">Thermal camera only</string>
+    <string name="mode_visible">Visible camera only</string>
+
+    <string name="palette_iron">Iron</string>
+    <string name="palette_rainbow">Rainbow</string>
+    <string name="palette_white_hot">White hot</string>
+    <string name="palette_black_hot">Black hot</string>
+    <string name="palette_lava">Lava</string>
+    <string name="palette_arctic">Arctic</string>
+
+    <string name="row_emissivity_fmt">Emissivity: %1$s</string>
+    <string name="row_reflected_fmt">Reflected temperature: %1$s °C</string>
+    <string name="row_calibration">Temperature calibration…</string>
+    <string name="msx_weak">Weak</string>
+    <string name="msx_medium">Medium</string>
+    <string name="msx_strong">Strong</string>
+    <string name="row_msx_alignment">Edge alignment…</string>
+
+    <string name="sw_auto_orientation">Auto orientation (recommended)</string>
+    <string name="row_rotate_fmt">Rotate image by 90° (current correction: %1$d°)</string>
+    <string name="sw_mirror">Mirror</string>
+    <string name="sw_fill">Fill the screen (crops the edges)</string>
+    <string name="sw_hide_controls">Hide controls (tap the screen to show)</string>
+    <string name="sw_markers">Hottest / coldest point markers</string>
+    <string name="sw_scale">Temperature scale</string>
+
+    <string name="lang_uk">Українська</string>
+    <string name="lang_en">English</string>
+
+    <string name="row_usb_diag">USB diagnostics</string>
+    <string name="row_save_raw">Save raw frame (for analysis)</string>
+
+    <!-- Dialogs -->
+    <string name="btn_ok">OK</string>
+    <string name="btn_cancel">Cancel</string>
+    <string name="btn_close">Close</string>
+    <string name="btn_done">Done</string>
+    <string name="err_invalid_number">Invalid number</string>
+
+    <string name="emis_title">Emissivity</string>
+    <string name="emis_none">No correction</string>
+    <string name="emis_skin">Human skin</string>
+    <string name="emis_water">Water, ice</string>
+    <string name="emis_plastic">Matte plastic, rubber, paint</string>
+    <string name="emis_masonry">Brick, concrete, paper</string>
+    <string name="emis_glass">Glass</string>
+    <string name="emis_wood">Wood, fabric</string>
+    <string name="emis_oxidized">Oxidized metal</string>
+    <string name="emis_shiny">Shiny metal (very inaccurate)</string>
+    <string name="emis_custom">Custom value…</string>
+    <string name="emis_custom_title">Custom value (0.05–1.00)</string>
+    <string name="reflected_title">Reflected temperature, °C</string>
+    <string name="reflected_hint">Temperature of the surrounding objects (usually room temperature).</string>
+
+    <!-- Calibration card -->
+    <string name="cal_title">Temperature calibration</string>
+    <string name="cal_hint">Point the crosshair at an object whose temperature you know, then tap \"Add reference\".</string>
+    <string name="cal_live_fmt">Under the crosshair now: %1$s (ε %2$s)</string>
+    <string name="cal_params_fmt">Scale %1$s, offset %2$s — %3$s</string>
+    <string name="cal_mode_factory">factory</string>
+    <string name="cal_mode_fit_fmt">fit from %1$d points</string>
+    <string name="cal_mode_offset_fmt">offset from %1$d point(s)</string>
+    <string name="cal_add">Add reference</string>
+    <string name="cal_reset">Reset</string>
+    <string name="cal_no_data">No data yet: wait for the image and the shutter calibration.</string>
+    <string name="cal_prompt_title">True temperature under the crosshair, °C</string>
+    <string name="cal_prompt_hint">Enter the reading of your thermometer for the object under the crosshair.</string>
+    <string name="cal_added_fmt">Reference added. Scale %1$s, offset %2$s (%3$s)</string>
+    <string name="cal_fit_full">full fit</string>
+    <string name="cal_fit_offset_only">offset only</string>
+    <string name="cal_reset_done">Calibration reset to factory values</string>
+
+    <!-- MSX alignment card -->
+    <string name="align_title">Edge alignment</string>
+    <string name="align_hint">Arrows shift the visible-camera edges relative to the thermal image; Larger / Smaller change their size.</string>
+    <string name="align_left">◀ left</string>
+    <string name="align_right">right ▶</string>
+    <string name="align_up">▲ up</string>
+    <string name="align_down">down ▼</string>
+    <string name="align_smaller">Smaller</string>
+    <string name="align_bigger">Larger</string>
+    <string name="align_reset">Reset</string>
+    <string name="align_info_fmt">Shift X %1$s, shift Y %2$s, scale %3$s</string>
+
+    <!-- USB diagnostics screen -->
+    <string name="diag_title">USB diagnostics</string>
+    <string name="diag_hint">Connect the camera, allow access in the system dialog and tap \"Scan\". The report is saved to an app file.</string>
+    <string name="diag_scan">Scan</string>
+    <string name="diag_copy">Copy report</string>
+    <string name="diag_copied">Report copied</string>
+
+    <!-- Manual shutter calibration -->
+    <string name="row_ffc">Calibrate the shutter now</string>
+    <string name="btn_start">Start</string>
+    <string name="ffc_not_connected">The camera is not connected, so there is nothing to calibrate</string>
+    <string name="ffc_busy">The camera is calibrating the shutter right now</string>
+    <string name="ffc_requested">Shutter calibration requested</string>
+    <string name="ffc_no_reaction">The camera did not start a calibration. It probably considers itself calibrated: it recalibrates by itself about every two minutes.</string>
+    <string name="ffc_probe_title">Shutter calibration command</string>
+    <string name="ffc_probe_message">FLIR does not publish the command that makes the camera calibrate its shutter on request, so the app has to find it. The camera calibrates itself about every two minutes and ignores the command while it thinks it is calibrated. So the app will switch the camera\'s automatic calibration off, wait until the camera asks for a calibration, then try known guesses one by one and watch whether the shutter closes (the shutter may click). Automatic calibration is always switched back on. This takes up to about 5 minutes: keep the camera plugged in and pointed at a steady scene.</string>
+    <string name="ffc_probe_running">Searching for the command… The camera\'s automatic calibration is switched off for now and will be restored. This can take up to about 5 minutes.</string>
+    <string name="ffc_probe_found_fmt">The shutter started in response to this command, and it is saved:\n%1$s\n\nThe button now sends it. The camera may ignore it while it considers itself calibrated.</string>
+    <string name="ffc_result_not_found_fmt">The camera asked for a calibration but did not react to any of the %1$d commands tried. It still calibrates itself about every two minutes. The attempts and the camera\'s replies are in the log (USB diagnostics) for further analysis.</string>
+    <string name="ffc_result_never">The camera did not ask for a calibration within about three minutes, so nothing could be tried. Automatic calibration was restored. Try again after a few more minutes of use.</string>
+    <string name="ffc_result_auto">The camera went on calibrating by itself even with automatic calibration switched off, so the search could not give a reliable answer. Automatic calibration was restored.</string>
+    <string name="ffc_result_send">The command could not be sent to the camera. Check the connection and try again.</string>
 </resources>

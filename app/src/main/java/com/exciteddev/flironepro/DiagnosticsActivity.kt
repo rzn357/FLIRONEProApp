@@ -23,8 +23,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Етап 0: показує всі USB-пристрої, просить дозвіл для FLIR і зберігає звіт у файл. */
-class MainActivity : AppCompatActivity() {
+/** USB diagnostics: lists all USB devices, asks for permission for the FLIR camera and saves the report to a file. */
+class DiagnosticsActivity : AppCompatActivity() {
 
     private lateinit var usbManager: UsbManager
     private lateinit var reportView: TextView
@@ -43,12 +43,12 @@ class MainActivity : AppCompatActivity() {
                         permissionRequested.remove(it)
                         if (!granted) permissionDenied.add(it)
                     }
-                    logEvent("Дозвіл для ${device?.deviceName}: ${if (granted) "НАДАНО" else "ВІДХИЛЕНО"}")
+                    logEvent("Permission for ${device?.deviceName}: ${if (granted) "GRANTED" else "DENIED"}")
                 }
 
                 UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
                     device?.deviceName?.let { permissionDenied.remove(it) }
-                    logEvent("Підключено: ${device?.deviceName}")
+                    logEvent("Attached: ${device?.deviceName}")
                 }
 
                 UsbManager.ACTION_USB_DEVICE_DETACHED -> {
@@ -56,7 +56,7 @@ class MainActivity : AppCompatActivity() {
                         permissionRequested.remove(it)
                         permissionDenied.remove(it)
                     }
-                    logEvent("Відключено: ${device?.deviceName}")
+                    logEvent("Detached: ${device?.deviceName}")
                 }
             }
             scan()
@@ -65,7 +65,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        setContentView(R.layout.activity_diagnostics)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        title = getString(R.string.diag_title)
         DiagLog.init(this)
         usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
         reportView = findViewById(R.id.reportView)
@@ -74,16 +76,10 @@ class MainActivity : AppCompatActivity() {
             permissionDenied.clear()
             scan()
         }
-        findViewById<Button>(R.id.btnLive).setOnClickListener {
-            startActivity(Intent(this, StreamActivity::class.java))
-        }
-        findViewById<Button>(R.id.btnDemo).setOnClickListener {
-            startActivity(Intent(this, StreamActivity::class.java).putExtra(StreamActivity.EXTRA_DEMO, true))
-        }
         findViewById<Button>(R.id.btnCopy).setOnClickListener {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("USB report", reportView.text))
-            Toast.makeText(this, R.string.copied, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.diag_copied, Toast.LENGTH_SHORT).show()
         }
 
         val filter = IntentFilter().apply {
@@ -92,19 +88,12 @@ class MainActivity : AppCompatActivity() {
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
         }
         ContextCompat.registerReceiver(this, usbReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
-
-        if (intent?.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
-            logEvent("Застосунок запущено через підключення USB-пристрою")
-        }
         scan()
     }
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
-            logEvent("Повторний запуск через підключення USB-пристрою")
-        }
-        scan()
+    override fun onSupportNavigateUp(): Boolean {
+        finish()
+        return true
     }
 
     override fun onDestroy() {
@@ -115,19 +104,19 @@ class MainActivity : AppCompatActivity() {
     private fun scan() {
         val devices = usbManager.deviceList.values.sortedBy { it.deviceName }
         val sb = StringBuilder()
-        sb.appendLine("FLIR ONE Pro App — USB-звіт, ${timestamp()}")
-        sb.appendLine("Телефон: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
-        sb.appendLine("USB-пристроїв: ${devices.size}")
+        sb.appendLine("FLIR ONE Pro App - USB report, ${timestamp()}")
+        sb.appendLine("Phone: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+        sb.appendLine("USB devices: ${devices.size}")
         sb.appendLine()
 
         if (events.isNotEmpty()) {
-            sb.appendLine("--- Події ---")
+            sb.appendLine("--- Events ---")
             events.forEach { sb.appendLine(it) }
             sb.appendLine()
         }
 
         if (devices.isEmpty()) {
-            sb.appendLine("USB-пристроїв не знайдено. Підключіть камеру в USB-C порт телефону.")
+            sb.appendLine("No USB devices found. Connect the camera to the phone's USB-C port.")
         }
 
         for (device in devices) {
@@ -138,23 +127,23 @@ class MainActivity : AppCompatActivity() {
             if (needsPermission) requestPermission(device)
 
             sb.appendLine(runCatching { UsbReport.describe(usbManager, device) }
-                .getOrElse { "!! Помилка опису ${device.deviceName}: $it\n" })
+                .getOrElse { "!! Error describing ${device.deviceName}: $it\n" })
         }
 
         val text = sb.toString()
         reportView.text = text
         Log.i(TAG, text)
-        // Не затираємо звіт з пристроєм порожнім скануванням (наприклад, після відключення камери).
+        // Do not overwrite a report that contains a device with an empty scan (e.g. after the camera was unplugged).
         if (devices.isNotEmpty()) {
             runCatching { File(filesDir, REPORT_FILE).writeText(text) }
-                .onFailure { Log.w(TAG, "Не вдалося зберегти звіт", it) }
+                .onFailure { Log.w(TAG, "Could not save the report", it) }
         }
     }
 
     private fun requestPermission(device: UsbDevice) {
-        logEvent("Запит дозволу для ${device.deviceName}")
+        logEvent("Requesting permission for ${device.deviceName}")
         val intent = Intent(ACTION_USB_PERMISSION).setPackage(packageName)
-        // Системі потрібно додати до інтенту extras (EXTRA_DEVICE, EXTRA_PERMISSION_GRANTED), тому FLAG_MUTABLE.
+        // The system adds extras (EXTRA_DEVICE, EXTRA_PERMISSION_GRANTED) to the intent, hence FLAG_MUTABLE.
         val pending = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_MUTABLE)
         usbManager.requestPermission(device, pending)
     }

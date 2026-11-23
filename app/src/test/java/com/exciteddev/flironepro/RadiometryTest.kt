@@ -10,7 +10,7 @@ class RadiometryTest {
 
     private fun stats(min: Int, max: Int, mean: Int) = ThermalStats(min, max, mean, 0, 0, 0, 0, mean)
 
-    /** Опорна точка, як у реальній камері: плато 3889 при затворі 305,41 K і сенсорі 305,66 K. */
+    /** An anchor as on the real camera: plateau 3889 with the shutter at 305.41 K and the sensor at 305.66 K. */
     private fun radiometryWith(raw: Int, shutterK: Double, fpaK: Double): Radiometry {
         val r = Radiometry()
         repeat(5) { r.onFrame(true, stats(raw - 10, raw + 10, raw), shutterK, fpaK) }
@@ -27,7 +27,7 @@ class RadiometryTest {
     fun anchorIsCommittedAfterFfcEnds() {
         val r = Radiometry()
         repeat(4) { r.onFrame(true, stats(3880, 3900, 3890), 305.41, 305.66) }
-        assertNull(r.anchor) // FFC ще триває
+        assertNull(r.anchor) // the FFC is still in progress
         r.onFrame(false, stats(3000, 3500, 3200), 305.41, 305.66)
         val a = r.anchor
         assertNotNull(a)
@@ -38,7 +38,7 @@ class RadiometryTest {
     @Test
     fun transitionalShutterFramesAreIgnored() {
         val r = Radiometry()
-        // затвор рухається: великий розкид значень
+        // the shutter is moving: a large spread of values
         repeat(10) { r.onFrame(true, stats(1787, 4995, 3325), 305.41, 305.66) }
         r.onFrame(false, stats(3000, 3500, 3200), 305.41, 305.66)
         assertNull(r.anchor)
@@ -69,7 +69,7 @@ class RadiometryTest {
         }
     }
 
-    /** Регресія на реальних вимірах: гаряча вода (термопара 74-75 °C) і холодна банка з холодильника (~2-4 °C). */
+    /** Regression on real measurements: hot water (thermocouple 74-75 °C) and a cold jar from the fridge (~2-4 °C). */
     @Test
     fun reproducesHotWaterMeasurement() {
         val e2 = radiometryWith(3889, 305.41, 305.66)
@@ -78,7 +78,7 @@ class RadiometryTest {
         val hotFromE3 = e3.celsius(6522, 306.06)!!
         assertEquals(74.5, hotFromE2, 1.5)
         assertEquals(74.5, hotFromE3, 1.5)
-        // обидві опорні точки FFC мають давати майже однаковий результат (перевірка поправки на дрейф сенсора)
+        // both FFC anchors must give almost the same result (checks the sensor drift correction)
         assertEquals(hotFromE2, hotFromE3, 0.5)
     }
 
@@ -93,8 +93,8 @@ class RadiometryTest {
     }
 
     /**
-     * Перевірка 2026-11-22 (сесія 20:51-20:55): вода кімнатної температури (термопара 19-20 °C) і заморожені креветки
-     * (термопара -12...-13 °C), опора FFC: плато 3845 при затворі 304,92 K і сенсорі 305,21 K.
+     * Check of 2026-11-22 (session 20:51-20:55): room-temperature water (thermocouple 19-20 °C) and frozen shrimp
+     * (thermocouple -12...-13 °C), FFC anchor: plateau 3845 with the shutter at 304.92 K and the sensor at 305.21 K.
      */
     @Test
     fun reproducesRoomWaterAndFrozenMeasurements() {
@@ -104,8 +104,8 @@ class RadiometryTest {
     }
 
     /**
-     * Холодні точки (велике «плече» від опори затвора) жорстко задають масштаб. Масштаб, за якого гаряча вода дала б
-     * об'ємні 79,5 °C, зламав би мороз більш ніж на 5 K, тож розбіжність на гарячому - фізика поверхні води, а не помилка моделі.
+     * The cold points (a long lever arm from the shutter anchor) pin the scale down firmly. A scale for which hot water would read
+     * the bulk 79.5 °C would break the freezer point by more than 5 K, so the hot-water mismatch is the physics of the water surface, not a model error.
      */
     @Test
     fun frozenPointRejectsHigherSensitivityScale() {
@@ -115,15 +115,55 @@ class RadiometryTest {
             val phi = phiShutter + dS / countsPerPhi
             return Radiometry.B / kotlin.math.ln(Radiometry.R / phi + Radiometry.F) - 273.15
         }
-        assertTrue(coldWith(19.7) < -18.0) // масштаб, потрібний для 79,5 °C на гарячому, дає ~-20 °C на морозі
+        assertTrue(coldWith(19.7) < -18.0) // the scale needed for 79.5 °C when hot gives ~-20 °C in the freezer
     }
 
     @Test
     fun sensorDriftIsCompensated() {
         val r = radiometryWith(3889, 305.41, 305.66)
-        // сенсор нагрівся на 0,5 K: те саме сире значення означає холоднішу сцену
+        // the sensor warmed up by 0.5 K: the same raw value means a colder scene
         val same = r.celsius(3500, 305.66)!!
         val warmer = r.celsius(3500, 306.16)!!
         assertTrue(warmer < same)
+    }
+
+    @Test
+    fun fallbackAnchorIsUsedWhileTheSensorTemperatureIsClose() {
+        val earlier = radiometryWith(3889, 305.41, 305.66).anchor!!
+        val r = Radiometry()
+        assertNull(r.celsius(3889, 305.9))
+        r.fallbackAnchor = earlier
+        assertEquals(305.41 - 273.15, r.celsius(3889, 305.66)!!, 0.05)
+        assertNotNull(r.celsius(3500, 306.5)) // 0.84 K away: the drift correction covers it
+        assertNotNull(r.shutterPhi(306.5))
+        assertNull(r.shutterPhi()) // without a sensor temperature only the real anchor counts
+    }
+
+    @Test
+    fun fallbackAnchorIsNotUsedWhenTheSensorTemperatureIsFarAway() {
+        val r = Radiometry()
+        r.fallbackAnchor = radiometryWith(3889, 305.41, 305.66).anchor
+        assertNull(r.celsius(3889, 305.66 + Radiometry.MAX_FALLBACK_FPA_GAP_K + 0.5))
+        assertNull(r.effectiveAnchor(305.66 - Radiometry.MAX_FALLBACK_FPA_GAP_K - 0.5))
+    }
+
+    @Test
+    fun theSessionsOwnAnchorBeatsTheFallback() {
+        val own = radiometryWith(3889, 305.41, 305.66)
+        own.fallbackAnchor = Radiometry.Anchor(1000.0, 290.0, 300.0)
+        assertEquals(own.anchor, own.effectiveAnchor(305.66))
+        assertEquals(305.41 - 273.15, own.celsius(3889, 305.66)!!, 0.05)
+    }
+
+    @Test
+    fun theNewestAnchorIsRememberedForAWhile() {
+        Radiometry.forgetRemembered()
+        assertNull(Radiometry.recentAnchor(1_000L))
+        val a = Radiometry.Anchor(3889.0, 305.41, 305.66)
+        Radiometry.remember(a, 1_000L)
+        assertEquals(a, Radiometry.recentAnchor(1_000L + 60_000L))
+        assertNull(Radiometry.recentAnchor(1_000L + Radiometry.MAX_FALLBACK_AGE_MS + 1))
+        assertNull(Radiometry.recentAnchor(500L)) // a clock that went backwards is not trusted
+        Radiometry.forgetRemembered()
     }
 }

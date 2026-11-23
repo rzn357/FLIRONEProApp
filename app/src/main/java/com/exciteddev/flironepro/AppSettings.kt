@@ -3,25 +3,35 @@ package com.exciteddev.flironepro
 import android.content.Context
 import android.content.SharedPreferences
 
-/** Налаштування користувача, що зберігаються між запусками. Поля, які читає потік обробки, позначені @Volatile. */
+/** User settings persisted between launches. Fields read by the render thread are @Volatile. */
 class AppSettings(context: Context) {
     private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences("flir_settings", Context.MODE_PRIVATE)
 
     @Volatile var mode: DisplayMode = DisplayMode.entries.getOrElse(prefs.getInt("mode", 0)) { DisplayMode.MSX }
     @Volatile var palette: Palette = Palette.entries.getOrElse(prefs.getInt("palette", 0)) { Palette.IRON }
 
-    /** Поворот зображення за годинниковою стрілкою: 0, 90, 180, 270. */
-    @Volatile var rotation: Int = prefs.getInt("rotation", 0)
+    /** Compensate for the screen rotation automatically so the picture stays upright. */
+    @Volatile var autoRotate: Boolean = prefs.getBoolean("autoRotate", true)
+
+    /** Manual correction added to the automatic orientation, clockwise degrees: 0, 90, 180, 270. */
+    @Volatile var rotationOffset: Int = prefs.getInt("rotationOffset", 0)
+
+    /** Effective clockwise rotation currently applied to the image (computed by the activity, not persisted). */
+    @Volatile var rotation: Int = Orientation.SENSOR_BASE
+
     @Volatile var mirror: Boolean = prefs.getBoolean("mirror", false)
 
-    /** Положення хрестика в нормалізованих координатах теплового кадру. */
+    /** Fill the whole screen with the picture (edges are cropped) instead of showing it entirely. */
+    @Volatile var fillScreen: Boolean = prefs.getBoolean("fillScreen", false)
+
+    /** Crosshair position in normalized thermal-frame coordinates. */
     @Volatile var crossU: Float = prefs.getFloat("crossU", 0.5f)
     @Volatile var crossV: Float = prefs.getFloat("crossV", 0.5f)
 
     @Volatile var showMarkers: Boolean = prefs.getBoolean("showMarkers", true)
     @Volatile var showScale: Boolean = prefs.getBoolean("showScale", true)
 
-    /** Сила накладання контурів у режимі MSX: 0 слабко, 1 середньо, 2 сильно. */
+    /** Strength of the edge overlay in MSX mode: 0 weak, 1 medium, 2 strong. */
     @Volatile var msxLevel: Int = prefs.getInt("msxLevel", 1)
 
     @Volatile var alignment: Alignment = Alignment(
@@ -33,8 +43,11 @@ class AppSettings(context: Context) {
     @Volatile var emissivity: Double = prefs.getFloat("emissivity", 1.0f).toDouble()
     @Volatile var reflectedC: Double = prefs.getFloat("reflectedC", 20.0f).toDouble()
 
-    /** Точки калібрування температури, введені користувачем. */
+    /** Temperature calibration points entered by the user. */
     var calibrationPoints: List<TempCalibration.Point> = TempCalibration.parse(prefs.getString("calPoints", null))
+
+    /** The camera's shutter-calibration command found by [ShutterCalibration] (null until it was found). */
+    var ffcCommand: String? = prefs.getString("ffcCommand", null)
 
     val msxGain: Float
         get() = when (msxLevel) {
@@ -47,8 +60,10 @@ class AppSettings(context: Context) {
         prefs.edit()
             .putInt("mode", mode.ordinal)
             .putInt("palette", palette.ordinal)
-            .putInt("rotation", rotation)
+            .putBoolean("autoRotate", autoRotate)
+            .putInt("rotationOffset", rotationOffset)
             .putBoolean("mirror", mirror)
+            .putBoolean("fillScreen", fillScreen)
             .putFloat("crossU", crossU)
             .putFloat("crossV", crossV)
             .putBoolean("showMarkers", showMarkers)
@@ -60,10 +75,11 @@ class AppSettings(context: Context) {
             .putFloat("emissivity", emissivity.toFloat())
             .putFloat("reflectedC", reflectedC.toFloat())
             .putString("calPoints", TempCalibration.serialize(calibrationPoints))
+            .putString("ffcCommand", ffcCommand)
             .apply()
     }
 
-    /** Накладає збережені параметри на модель температури. */
+    /** Applies the saved parameters to the temperature model. */
     fun applyTo(r: Radiometry) {
         r.emissivity = emissivity
         r.reflectedC = reflectedC

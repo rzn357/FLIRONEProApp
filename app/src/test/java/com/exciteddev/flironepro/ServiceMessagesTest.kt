@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ServiceMessagesTest {
-    // Повідомлення, зняті з реальної камери.
+    // Messages captured from a real camera.
     private val voltage = """{"type":"batteryVoltageUpdate","data":{"voltage":3.74000000953674,"percentage":39}}"""
     private val noCharge = """{"type":"batteryChargingStateUpdate","data":{"chargingState":"stateNoCharging"}}"""
     private val current0 = """{"type":"batteryChargingCurrentUpdate","data":{"chargingCurrent":0}}"""
@@ -17,7 +17,7 @@ class ServiceMessagesTest {
         val b = ServiceMessages.updateBattery(BatteryState(), voltage)
         assertEquals(39, b.percentage)
         assertEquals(3.74, b.voltage!!, 0.001)
-        assertEquals("Бат. 39%", b.label())
+        assertNull(b.charging)
     }
 
     @Test
@@ -31,7 +31,7 @@ class ServiceMessagesTest {
     fun chargingStateIsDetected() {
         val b = ServiceMessages.updateBattery(BatteryState(50), """{"type":"batteryChargingStateUpdate","data":{"chargingState":"stateCharging"}}""")
         assertEquals(true, b.charging)
-        assertTrue(b.label().contains("заряджається"))
+        assertTrue(b.charging == true)
     }
 
     @Test
@@ -50,8 +50,8 @@ class ServiceMessagesTest {
     }
 
     @Test
-    fun unknownBatteryHasEmptyLabel() {
-        assertEquals("", BatteryState().label())
+    fun unknownBatteryHasNoValues() {
+        assertNull(BatteryState().charging)
         assertNull(BatteryState().percentage)
     }
 

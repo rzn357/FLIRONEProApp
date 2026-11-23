@@ -12,8 +12,8 @@ import java.io.File
 import java.io.RandomAccessFile
 
 /**
- * Запис відео H.264 (MP4): кадри малюються на Canvas вхідної поверхні кодека, тож у файл потрапляє саме те, що видно
- * на екрані (за вибраним режимом), з мітками температури. Якщо задано debugFile, пишемо у цей файл замість галереї.
+ * H.264 (MP4) video recording: frames are drawn on the Canvas of the codec's input surface, so the file gets exactly what is shown
+ * on the screen (for the selected mode), with the temperature marks. If debugFile is set, the video is written to that file instead of the gallery.
  */
 class VideoRecorder(
     private val context: Context,
@@ -69,16 +69,16 @@ class VideoRecorder(
             running = true
             startedAt = SystemClock.elapsedRealtime()
             drainThread = Thread({ drain(c) }, "flir-encoder").also { it.start() }
-            DiagLog.log("Запис відео розпочато: ${width}x$height -> $fileName")
+            DiagLog.log("Video recording started: ${width}x$height -> $fileName")
             true
         } catch (e: Exception) {
-            DiagLog.log("Не вдалося почати запис відео: $e")
+            DiagLog.log("Could not start video recording: $e")
             release(keep = false)
             false
         }
     }
 
-    /** Малює один кадр у відео. Викликати з потоку обробки. */
+    /** Draws one frame into the video. Call from the processing thread. */
     @Synchronized
     fun encode(draw: (Canvas) -> Unit) {
         if (!running) return
@@ -92,11 +92,11 @@ class VideoRecorder(
             }
             framesEncoded++
         } catch (e: Exception) {
-            DiagLog.log("Помилка кодування кадру відео: $e")
+            DiagLog.log("Video frame encoding error: $e")
         }
     }
 
-    /** Завершує запис. Повертає ім'я файлу, якщо відео збережено. */
+    /** Finishes the recording. Returns the file name if the video was saved. */
     fun stop(): String? {
         synchronized(this) {
             if (!running) return null
@@ -107,7 +107,7 @@ class VideoRecorder(
         val ok = muxerStarted && framesEncoded > 0
         val name = fileName
         release(keep = ok)
-        DiagLog.log("Запис відео завершено: кадрів=$framesEncoded, збережено=$ok")
+        DiagLog.log("Video recording finished: frames=$framesEncoded, saved=$ok")
         return if (ok) name else null
     }
 
@@ -141,7 +141,7 @@ class VideoRecorder(
                 }
             }
         } catch (e: Exception) {
-            DiagLog.log("Помилка запису відео (кодек): $e")
+            DiagLog.log("Video recording error (codec): $e")
         }
     }
 

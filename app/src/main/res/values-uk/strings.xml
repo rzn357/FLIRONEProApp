@@ -1,0 +1,157 @@
+<resources>
+    <string name="app_name">FLIR ONE Pro App</string>
+
+    <!-- Accessibility descriptions -->
+    <string name="cd_settings">Налаштування</string>
+    <string name="cd_photo">Зробити фото</string>
+    <string name="cd_video">Записати відео</string>
+    <string name="cd_video_stop">Зупинити запис</string>
+
+    <!-- Top bar -->
+    <string name="battery_fmt">%1$d%%</string>
+    <string name="fps_fmt">%1$s кадрів/с</string>
+
+    <!-- Status messages shown over the image -->
+    <string name="msg_no_camera">Камеру не знайдено.\nПідключіть FLIR ONE Pro до USB-C порту.</string>
+    <string name="msg_wait_permission">Очікую дозвіл на доступ до камери…</string>
+    <string name="msg_permission_denied">Дозвіл на доступ до камери відхилено.</string>
+    <string name="msg_wait_first_frame">Очікую перший кадр…</string>
+    <string name="msg_camera_disconnected">Камеру відключено.</string>
+    <string name="msg_connection_lost">Зв\'язок із камерою втрачено (її відключено?). Підключіть камеру знову й відкрийте застосунок заново.</string>
+    <string name="msg_demo_running">Демо: програються збережені кадри</string>
+    <string name="msg_demo_no_frames">Для демо немає збережених кадрів.</string>
+    <string name="note_demo">ДЕМО: збережені кадри, температури не точні</string>
+    <string name="note_waiting_ffc">чекаю калібрування затвором…</string>
+    <string name="note_ffc">калібрування затвором…</string>
+    <string name="note_emissivity_fmt">ε %1$s</string>
+
+    <!-- Capture -->
+    <string name="toast_photo_saved_fmt">Фото збережено: %1$s</string>
+    <string name="toast_photo_failed">Не вдалося зберегти фото</string>
+    <string name="toast_video_saved_fmt">Відео збережено: %1$s</string>
+    <string name="toast_video_failed">Відео не збережено (запис надто короткий?)</string>
+    <string name="toast_video_start_failed">Не вдалося почати запис відео</string>
+    <string name="toast_no_image">Поки немає зображення для збереження</string>
+    <string name="toast_raw_saved_fmt">Сирий кадр збережено: %1$s</string>
+    <string name="toast_raw_failed">Не вдалося зберегти кадр</string>
+    <string name="toast_controls_hidden">Торкніться екрана, щоб показати елементи керування</string>
+
+    <!-- Settings panel -->
+    <string name="settings_title">Налаштування</string>
+    <string name="sec_display">Режим показу</string>
+    <string name="sec_palette">Палітра</string>
+    <string name="sec_temperature">Температура</string>
+    <string name="sec_msx">Контури MSX</string>
+    <string name="sec_image">Зображення</string>
+    <string name="sec_overlays">Накладення</string>
+    <string name="sec_language">Мова</string>
+    <string name="sec_developer">Для розробника</string>
+
+    <string name="mode_msx">MSX (контури видимої камери на тепловізорі)</string>
+    <string name="mode_thermal">Лише тепловізор</string>
+    <string name="mode_visible">Лише звичайна камера</string>
+
+    <string name="palette_iron">Залізо</string>
+    <string name="palette_rainbow">Веселка</string>
+    <string name="palette_white_hot">Біле гаряче</string>
+    <string name="palette_black_hot">Чорне гаряче</string>
+    <string name="palette_lava">Жар</string>
+    <string name="palette_arctic">Арктика</string>
+
+    <string name="row_emissivity_fmt">Випромінювальна здатність: %1$s</string>
+    <string name="row_reflected_fmt">Відбита температура: %1$s °C</string>
+    <string name="row_calibration">Калібрування температури…</string>
+    <string name="msx_weak">Слабкі</string>
+    <string name="msx_medium">Середні</string>
+    <string name="msx_strong">Сильні</string>
+    <string name="row_msx_alignment">Вирівнювання контурів…</string>
+
+    <string name="sw_auto_orientation">Автоматична орієнтація (рекомендовано)</string>
+    <string name="row_rotate_fmt">Повернути зображення на 90° (поточна поправка: %1$d°)</string>
+    <string name="sw_mirror">Дзеркало</string>
+    <string name="sw_fill">Заповнити весь екран (краї обрізаються)</string>
+    <string name="sw_hide_controls">Сховати елементи керування (торкніться екрана, щоб показати)</string>
+    <string name="sw_markers">Маркери найгарячішої й найхолоднішої точок</string>
+    <string name="sw_scale">Шкала температур</string>
+
+    <string name="lang_uk">Українська</string>
+    <string name="lang_en">English</string>
+
+    <string name="row_usb_diag">USB-діагностика</string>
+    <string name="row_save_raw">Зберегти сирий кадр (для аналізу)</string>
+
+    <!-- Dialogs -->
+    <string name="btn_ok">OK</string>
+    <string name="btn_cancel">Скасувати</string>
+    <string name="btn_close">Закрити</string>
+    <string name="btn_done">Готово</string>
+    <string name="err_invalid_number">Некоректне число</string>
+
+    <string name="emis_title">Випромінювальна здатність</string>
+    <string name="emis_none">Без поправки</string>
+    <string name="emis_skin">Шкіра людини</string>
+    <string name="emis_water">Вода, лід</string>
+    <string name="emis_plastic">Матовий пластик, гума, фарба</string>
+    <string name="emis_masonry">Цегла, бетон, папір</string>
+    <string name="emis_glass">Скло</string>
+    <string name="emis_wood">Дерево, тканина</string>
+    <string name="emis_oxidized">Окиснений метал</string>
+    <string name="emis_shiny">Блискучий метал (дуже неточно)</string>
+    <string name="emis_custom">Своє значення…</string>
+    <string name="emis_custom_title">Своє значення (0.05–1.00)</string>
+    <string name="reflected_title">Відбита температура, °C</string>
+    <string name="reflected_hint">Температура навколишніх предметів (зазвичай кімнатна).</string>
+
+    <!-- Calibration card -->
+    <string name="cal_title">Калібрування температури</string>
+    <string name="cal_hint">Наведіть хрестик на предмет з відомою температурою й натисніть «Додати еталон».</string>
+    <string name="cal_live_fmt">Зараз під хрестиком: %1$s (ε %2$s)</string>
+    <string name="cal_params_fmt">Масштаб %1$s, зсув %2$s — %3$s</string>
+    <string name="cal_mode_factory">заводське</string>
+    <string name="cal_mode_fit_fmt">підгонка за %1$d точками</string>
+    <string name="cal_mode_offset_fmt">зсув за %1$d точк.</string>
+    <string name="cal_add">Додати еталон</string>
+    <string name="cal_reset">Скинути</string>
+    <string name="cal_no_data">Поки немає даних: дочекайтесь картинки та калібрування затвором.</string>
+    <string name="cal_prompt_title">Справжня температура під хрестиком, °C</string>
+    <string name="cal_prompt_hint">Введіть показання вашого термометра для предмета під хрестиком.</string>
+    <string name="cal_added_fmt">Еталон додано. Масштаб %1$s, зсув %2$s (%3$s)</string>
+    <string name="cal_fit_full">повна підгонка</string>
+    <string name="cal_fit_offset_only">лише зсув</string>
+    <string name="cal_reset_done">Калібрування скинуто до заводського</string>
+
+    <!-- MSX alignment card -->
+    <string name="align_title">Вирівнювання контурів</string>
+    <string name="align_hint">Стрілки зсувають контури видимої камери відносно теплової картинки; «Більші» / «Менші» змінюють їхній розмір.</string>
+    <string name="align_left">◀ вліво</string>
+    <string name="align_right">вправо ▶</string>
+    <string name="align_up">▲ вгору</string>
+    <string name="align_down">вниз ▼</string>
+    <string name="align_smaller">Менші</string>
+    <string name="align_bigger">Більші</string>
+    <string name="align_reset">Скинути</string>
+    <string name="align_info_fmt">Зсув X %1$s, зсув Y %2$s, масштаб %3$s</string>
+
+    <!-- USB diagnostics screen -->
+    <string name="diag_title">USB-діагностика</string>
+    <string name="diag_hint">Підключіть камеру, дозвольте доступ у діалозі системи й натисніть «Сканувати». Звіт зберігається у файл застосунку.</string>
+    <string name="diag_scan">Сканувати</string>
+    <string name="diag_copy">Копіювати звіт</string>
+    <string name="diag_copied">Звіт скопійовано</string>
+
+    <!-- Ручне калібрування затвора -->
+    <string name="row_ffc">Відкалібрувати затвор зараз</string>
+    <string name="btn_start">Почати</string>
+    <string name="ffc_not_connected">Камера не підключена, тож калібрувати нічого</string>
+    <string name="ffc_busy">Камера саме калібрує затвор</string>
+    <string name="ffc_requested">Калібрування затвора запрошено</string>
+    <string name="ffc_no_reaction">Камера не запустила калібрування. Імовірно, вона вважає себе відкаліброваною: сама калібрується приблизно кожні дві хвилини.</string>
+    <string name="ffc_probe_title">Команда калібрування затвора</string>
+    <string name="ffc_probe_message">FLIR не публікує команду, яка змушує камеру відкалібрувати затвор на вимогу, тож застосунок має знайти її сам. Камера калібрується сама приблизно кожні дві хвилини й ігнорує команду, поки вважає себе відкаліброваною. Тому застосунок вимкне автоматичне калібрування камери, дочекається, коли камера сама попросить калібрування, і спробує відомі припущення по черзі, стежачи, чи закривається затвор (затвор може клацнути). Автоматичне калібрування завжди вмикається назад. Це триває до 5 хвилин: не відключайте камеру й тримайте її спрямованою на нерухому сцену.</string>
+    <string name="ffc_probe_running">Пошук команди… Автоматичне калібрування камери тимчасово вимкнено, його буде відновлено. Це може тривати до 5 хвилин.</string>
+    <string name="ffc_probe_found_fmt">Затвор запустився у відповідь на цю команду, її збережено:\n%1$s\n\nТепер кнопка надсилає її. Камера може ігнорувати команду, поки вважає себе відкаліброваною.</string>
+    <string name="ffc_result_not_found_fmt">Камера попросила калібрування, але не відреагувала на жодну з %1$d випробуваних команд. Вона все одно калібрується сама приблизно кожні дві хвилини. Спроби та відповіді камери записано в журнал (USB-діагностика) для подальшого аналізу.</string>
+    <string name="ffc_result_never">Камера не попросила калібрування приблизно за три хвилини, тож пробувати було нічого. Автоматичне калібрування відновлено. Спробуйте ще раз після кількох хвилин роботи.</string>
+    <string name="ffc_result_auto">Камера й далі калібрувалася сама, навіть коли автоматичне калібрування вимкнено, тому надійної відповіді пошук не дав. Автоматичне калібрування відновлено.</string>
+    <string name="ffc_result_send">Не вдалося надіслати команду камері. Перевірте підключення й спробуйте ще раз.</string>
+</resources>

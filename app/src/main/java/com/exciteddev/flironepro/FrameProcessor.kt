@@ -10,29 +10,29 @@ import android.graphics.Paint
 import android.os.SystemClock
 import java.util.concurrent.Executors
 
-/** Один кадр від камери, уже розібраний на потоці USB (дешеві операції), для важкої обробки на потоці показу. */
+/** One camera frame, already parsed on the USB thread (cheap work), handed over for the heavy processing. */
 class FrameSample(
     val frame: FlirFrame,
     val raw: IntArray?,
-    /** true, якщо тепловий вміст можна показувати (не під час калібрування затвором). */
+    /** true if the thermal content may be shown (the shutter is not closed for calibration). */
     val valid: Boolean,
     val fpaK: Double?,
-    val fps: Float,
 )
 
-/** Усереднене показання під хрестиком для калібрування: S' (без користувацького зсуву) і Φ затвора опорної точки. */
+/** Averaged reading under the crosshair for calibration: S' (without the user offset) and the shutter's Φ of the anchor. */
 class CalSample(val relative: Double, val phiShutter: Double, val tempC: Double?)
 
 /**
- * Потік показу: бере найновіший кадр, складає картинку за режимом (тепловізор / звичайна / MSX), рахує температури
- * під хрестиком і на маркерах, віддає все екрану та (за потреби) пише у відео чи зберігає знімок.
- * Якщо не встигає, пропускає застарілі кадри - USB-читання від цього не страждає.
+ * Render thread: takes the newest frame, composes the picture for the current mode (thermal / visible / MSX), computes the
+ * temperatures under the crosshair and at the markers, hands everything to the screen and, if requested, to the video
+ * encoder or a photo. If it cannot keep up it skips stale frames, so USB reading is not affected.
  */
 class FrameProcessor(
     private val context: Context,
     private val settings: AppSettings,
     private val radiometry: Radiometry,
     private val view: ThermalView,
+    private val texts: UiTexts,
 ) : Thread("flir-render") {
 
     @Volatile var recorder: VideoRecorder? = null
@@ -43,7 +43,7 @@ class FrameProcessor(
     private var latest: FrameSample? = null
     @Volatile private var running = true
 
-    // Стан обробки (лише цей потік).
+    // Processing state (this thread only).
     private val thermalRaw = IntArray(ThermalImage.W * ThermalImage.H)
     private val smoothed = IntArray(ThermalImage.W * ThermalImage.H)
     private var haveThermal = false
@@ -59,10 +59,16 @@ class FrameProcessor(
     private var visLuma = IntArray(0)
     private var visPixels = IntArray(0)
     private val decodeOpts = BitmapFactory.Options().apply { inSampleSize = 2 }
+    private val decodeOptsFull = BitmapFactory.Options().apply { inSampleSize = 1 }
 
     private val calRing = ArrayDeque<CalSample>()
     private val capturePaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val saver = Executors.newSingleThreadExecutor()
+    private val painters = HashMap<Int, OverlayPainter>()
+
+    private var timeSum = 0L
+    private var timeMax = 0L
+    private var timeCount = 0
 
     fun submit(s: FrameSample) {
         synchronized(lock) {
@@ -94,21 +100,17 @@ class FrameProcessor(
             try {
                 process(s)
             } catch (e: Exception) {
-                DiagLog.log("Помилка обробки кадру: $e")
+                DiagLog.log("Frame processing error: $e")
             }
             val dt = SystemClock.elapsedRealtime() - t0
             timeSum += dt
             if (dt > timeMax) timeMax = dt
             if (++timeCount == 60) {
-                DiagLog.log("Обробка кадру (режим ${settings.mode}): середнє ${timeSum / timeCount} мс, максимум $timeMax мс")
+                DiagLog.log("Frame processing (mode ${settings.mode}): average ${timeSum / timeCount} ms, max $timeMax ms")
                 timeSum = 0; timeMax = 0; timeCount = 0
             }
         }
     }
-
-    private var timeSum = 0L
-    private var timeMax = 0L
-    private var timeCount = 0
 
     private fun process(s: FrameSample) {
         val mode = settings.mode
@@ -132,7 +134,7 @@ class FrameProcessor(
 
         if (mode != DisplayMode.THERMAL) decodeVisible(s.frame)
 
-        // Мінімальний розкид діапазону, щоб на рівній сцені не підсилювався шум.
+        // Minimum span of the range, so noise is not amplified on a flat scene.
         var lo = rangeLo
         var hi = rangeHi
         if (hi - lo < MIN_SPAN) {
@@ -157,9 +159,14 @@ class FrameProcessor(
         }
     }
 
+    /**
+     * MSX needs the visible frame at half resolution (speed); in the visible-only mode with "fill the screen" the picture is
+     * enlarged the most, so it is decoded at full resolution to keep it as sharp as possible.
+     */
     private fun decodeVisible(frame: FlirFrame) {
         val jpg = frame.jpegBytes() ?: return
-        val bm = BitmapFactory.decodeByteArray(jpg, 0, jpg.size, decodeOpts) ?: return
+        val full = settings.mode == DisplayMode.VISIBLE && settings.fillScreen
+        val bm = BitmapFactory.decodeByteArray(jpg, 0, jpg.size, if (full) decodeOptsFull else decodeOpts) ?: return
         visBitmap = bm
     }
 
@@ -211,30 +218,28 @@ class FrameProcessor(
         }
         return OverlayState(
             mode = mode,
-            paletteLabel = settings.palette.label,
             lut = cachedLut(settings.palette),
             cross = cross,
             hot = hot,
             cold = cold,
             scaleLoC = loC,
             scaleHiC = hiC,
-            waitingForAnchor = radiometry.anchor == null,
+            waitingForAnchor = radiometry.effectiveAnchor(fpaK) == null,
             ffcActive = !s.valid,
             emissivity = radiometry.emissivity,
-            fps = s.fps,
         )
     }
 
     private fun recordCalSample(avgRaw: Double, tempC: Double?) {
         val rel = radiometry.relative(avgRaw, fpaK) ?: return
-        val phi = radiometry.shutterPhi() ?: return
+        val phi = radiometry.shutterPhi(fpaK) ?: return
         synchronized(calRing) {
             calRing.addLast(CalSample(rel, phi, tempC))
             while (calRing.size > RING) calRing.removeFirst()
         }
     }
 
-    /** Усереднене показання під хрестиком за останні кадри (для додавання еталонної точки). */
+    /** Reading under the crosshair averaged over the last frames (for adding a reference point). */
     fun calibrationSample(): CalSample? = synchronized(calRing) {
         if (calRing.isEmpty()) return null
         CalSample(
@@ -244,7 +249,7 @@ class FrameProcessor(
         )
     }
 
-    /** Малює вміст і накладення на canvas заданого розміру (для знімків і відео). */
+    /** Draws the picture and the overlays on a canvas of the given size (for photos and videos; always the whole frame). */
     private fun drawComposite(canvas: Canvas, w: Int, h: Int, content: Bitmap, overlay: OverlayState) {
         canvas.drawColor(Color.BLACK)
         val t = ViewTransform(w.toFloat(), h.toFloat(), content.width.toFloat() / content.height, settings.rotation, settings.mirror)
@@ -258,11 +263,9 @@ class FrameProcessor(
         val m = Matrix()
         m.setPolyToPoly(src, 0, dst, 0, 4)
         canvas.drawBitmap(content, m, capturePaint)
-        val painter = synchronized(painters) { painters.getOrPut(w) { OverlayPainter(w / 360f) } }
+        val painter = synchronized(painters) { painters.getOrPut(w) { OverlayPainter(w / 360f, texts) } }
         painter.draw(canvas, t, overlay, settings.crossU, settings.crossV, settings.alignment, settings.showMarkers, settings.showScale, null)
     }
-
-    private val painters = HashMap<Int, OverlayPainter>()
 
     private fun savePhoto(content: Bitmap, overlay: OverlayState) {
         val rotated = settings.rotation % 180 != 0
@@ -272,12 +275,12 @@ class FrameProcessor(
         drawComposite(Canvas(bm), w, h, content, overlay)
         saver.execute {
             val name = MediaSaver.savePhoto(context, bm)
-            DiagLog.log("Фото збережено: $name")
+            DiagLog.log("Photo saved: $name")
             onPhotoSaved?.invoke(name)
         }
     }
 
-    /** Малює поточний вигляд у Bitmap (для діагностичних знімків екрана). */
+    /** Renders the current picture into a bitmap (diagnostic snapshots). */
     fun renderSnapshot(w: Int, h: Int): Bitmap? {
         val vf = view.currentFrame() ?: return null
         val bm = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)

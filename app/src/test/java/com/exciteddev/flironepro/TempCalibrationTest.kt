@@ -16,7 +16,7 @@ class TempCalibrationTest {
         return r
     }
 
-    /** Сире значення, яке «справжня» камера з параметрами (b, зсув) дала б для температури trueC. */
+    /** The raw value a "true" camera with parameters (b, offset) would give for the temperature trueC. */
     private fun simulatedRaw(r: Radiometry, trueC: Double, b: Double, offset: Double): Double {
         val a = r.anchor!!
         val phi = Radiometry.planck(trueC + 273.15)
@@ -34,7 +34,7 @@ class TempCalibrationTest {
     @Test
     fun singlePointFixesOffsetAndReproducesReference() {
         val r = radiometry()
-        // «Справжня» камера має зсув +60 лічильників відносно заводської моделі.
+        // The "true" camera has an offset of +60 counts relative to the factory model.
         val raw = simulatedRaw(r, 40.0, Radiometry.DEFAULT_COUNTS_PER_PHI, 60.0)
         assertTrue(r.celsius(raw, 305.3)!! != 40.0)
         val pt = r.calibrationPoint(r.relative(raw, 305.3)!!, r.shutterPhi()!!, 40.0, 1.0, 20.0)
@@ -60,7 +60,7 @@ class TempCalibrationTest {
         assertEquals(offTrue, fit.offsetCounts, 0.5)
         r.countsPerPhi = fit.countsPerPhi
         r.offsetCounts = fit.offsetCounts
-        // третя температура, якої не було серед еталонів
+        // a third temperature that was not among the references
         val raw = simulatedRaw(r, 25.0, bTrue, offTrue)
         assertEquals(25.0, r.celsius(raw, 305.3)!!, 0.1)
     }
@@ -102,12 +102,12 @@ class TempCalibrationTest {
         val r = radiometry()
         r.emissivity = 0.9
         r.reflectedC = 20.0
-        // Об'єкт 60 °C з ε=0,9: сенсор бачить суміш власного випромінювання і відбитого.
+        // An object at 60 °C with ε=0.9: the sensor sees a mix of its own radiation and the reflected one.
         val a = r.anchor!!
         val phiMeas = 0.9 * Radiometry.planck(333.15) + 0.1 * Radiometry.planck(293.15)
         val raw = a.raw + Radiometry.DEFAULT_COUNTS_PER_PHI * (phiMeas - Radiometry.planck(a.shutterK))
         assertEquals(60.0, r.celsius(raw, 305.3)!!, 0.05)
-        // а без поправки (ε=1) те саме сире значення давало б менше
+        // and without the correction (ε=1) the same raw value would read lower
         r.emissivity = 1.0
         assertTrue(r.celsius(raw, 305.3)!! < 59.0)
     }
@@ -117,6 +117,6 @@ class TempCalibrationTest {
         val r = radiometry()
         val p1 = r.calibrationPoint(100.0, r.shutterPhi()!!, 60.0, 1.0, 20.0)
         val p2 = r.calibrationPoint(100.0, r.shutterPhi()!!, 60.0, 0.9, 20.0)
-        assertTrue(p2.x < p1.x) // при ε<1 справжній об'єкт випромінює менше за чорне тіло тієї ж температури
+        assertTrue(p2.x < p1.x) // at ε<1 a real object radiates less than a black body of the same temperature
     }
 }

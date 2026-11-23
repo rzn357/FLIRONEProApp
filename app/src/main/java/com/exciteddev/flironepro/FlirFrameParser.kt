@@ -1,8 +1,8 @@
 package com.exciteddev.flironepro
 
 /**
- * Збирає кадри з потоку байтів ендпоінта 0x85. Не залежить від того, на які шматки USB порізав дані:
- * шукає магічні байти, читає розмір і чекає, поки кадр набереться повністю.
+ * Assembles frames from the byte stream of endpoint 0x85. Independent of how USB split the data into chunks:
+ * it looks for the magic bytes, reads the size and waits until the frame is complete.
  */
 class FlirFrameParser(
     private val onFrame: (FlirFrame) -> Unit,
@@ -35,11 +35,11 @@ class FlirFrameParser(
         while (true) {
             val m = indexOfMagic(pos)
             if (m < 0) {
-                // Може бути початок магічних байтів на межі шматків - лишаємо останні 3 байти.
+                // The magic bytes may begin at a chunk boundary - keep the last 3 bytes.
                 val keep = maxOf(pos, len - 3)
                 if (keep > pos) {
                     bytesSkipped += keep - pos
-                    if (keep - pos > 0 && len - pos > 3) onEvent("Немає магічних байтів, пропущено ${keep - pos} байт")
+                    if (keep - pos > 0 && len - pos > 3) onEvent("No magic bytes, skipped ${keep - pos} bytes")
                 }
                 pos = keep
                 break
@@ -47,7 +47,7 @@ class FlirFrameParser(
             if (m > pos) {
                 resyncs++
                 bytesSkipped += m - pos
-                onEvent("Втрата синхронізації: пропущено ${m - pos} байт до магічних байтів")
+                onEvent("Lost synchronization: skipped ${m - pos} bytes before the magic bytes")
                 pos = m
             }
             if (len - pos < HEADER_READ) break
@@ -56,12 +56,12 @@ class FlirFrameParser(
             val total = frameSize.toLong() + FlirFrame.HEADER_SIZE
             if (frameSize < 0 || total > MAX_FRAME) {
                 resyncs++
-                onEvent("Некоректний заголовок: FrameSize=$frameSize, пропускаю байт")
+                onEvent("Invalid header: FrameSize=$frameSize, skipping a byte")
                 bytesSkipped++
                 pos += 1
                 continue
             }
-            if (len - pos < total) break // кадр ще не прийшов повністю
+            if (len - pos < total) break // the frame has not fully arrived yet
 
             val start = pos
             val data = buf.copyOfRange(start, start + total.toInt())

@@ -5,78 +5,114 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
+import android.media.MediaActionSound
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.text.InputType
+import android.view.Surface
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.LinearLayout
+import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
+import androidx.core.os.LocaleListCompat
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.updatePadding
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
-import java.io.FileOutputStream
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import kotlin.math.abs
 
 /**
- * Основний екран: живе зображення з трьома режимами (тепловізор / звичайна камера / MSX), рухомий хрестик із температурою,
- * маркери найгарячішої й найхолоднішої точок, фото й відео, налаштування випромінювальної здатності та калібрування температури.
+ * Main screen: the live picture with three display modes (thermal / visible / MSX), a draggable crosshair with its
+ * temperature, markers of the hottest and coldest points, photo and video capture, emissivity settings and temperature
+ * calibration. The only controls on top of the picture are the settings gear, the battery and the frame rate (top) and
+ * the photo / video buttons (bottom).
  */
 class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Listener {
 
     private lateinit var usbManager: UsbManager
-    private lateinit var thermalView: ThermalView
+    internal lateinit var thermalView: ThermalView
+    internal lateinit var settings: AppSettings
+    internal lateinit var rootView: FrameLayout
+    private lateinit var settingsPanel: SettingsPanel
+
+    private lateinit var topBar: View
+    private lateinit var statusPill: View
+    private lateinit var batteryIcon: ImageView
+    private lateinit var batteryText: TextView
+    private lateinit var fpsText: TextView
     private lateinit var bottomBar: View
-    private lateinit var calPanel: View
+    private lateinit var btnVideo: View
+    private lateinit var videoIcon: ImageView
+    private lateinit var videoTimer: TextView
+    private lateinit var cardHost: View
+    private lateinit var calCard: View
     private lateinit var calText: TextView
-    private lateinit var btnMode: Button
-    private lateinit var btnPalette: Button
-    private lateinit var btnVideo: Button
-    private lateinit var settings: AppSettings
+    private lateinit var alignCard: View
+    private lateinit var alignInfo: TextView
 
     private val ui = Handler(Looper.getMainLooper())
     private var camera: FlirCamera? = null
-    private var processor: FrameProcessor? = null
+    internal var processor: FrameProcessor? = null
     private var demoSource: DemoSource? = null
     private var radiometry = Radiometry()
     private var statsLog: FrameStatsLog? = null
     private var permissionAsked = false
+    private val sound = MediaActionSound()
 
     @Volatile private var battery = BatteryState()
+    private val batteryDrawable = BatteryDrawable()
     private var message: String? = null
-    private var messageUntil = 0L
     private var recorder: VideoRecorder? = null
     private var demo = false
     private var selfTest = false
-    private var uiHidden = false
+    private var controlsHidden = false
     @Volatile private var lastFrame: FlirFrame? = null
 
-    // Стан, який чіпає лише потік кадрів (USB або демо).
-    private var frameCount = 0
+    /** Display-cutout / system-bar insets (used to keep the settings screen clear of the notch). */
+    internal var contentInsets: androidx.core.graphics.Insets = androidx.core.graphics.Insets.NONE
+
+    /** Test hook: pretend the view has this size in pixels (width, height); null = use the real one. */
+    internal var testViewSize: Pair<Int, Int>? = null
+
+    /** Test hook: pretend the screen has this rotation (degrees); null = use the real one. */
+    internal var forcedDisplayRotation: Int? = null
+
+    // State touched only by the frame thread (USB or demo).
+    @Volatile private var frameCount = 0
     private var fpsStart = 0L
     private var fpsFrames = 0
-    private var fps = 0f
-    private var ffcActive = false
+    @Volatile private var fps = 0f
+    @Volatile private var ffcActive = false
     private var dropAfterFfc = false
+    @Volatile private var lastFfcState: String? = null
+    private var autoTuningEnsured = false
+
+    /** Time (elapsedRealtime) of the newest frame that showed a calibration under way (state PROGRESS or shutter closed); 0 = none. */
+    @Volatile private var lastFfcActivityAt = 0L
+
+    @Volatile private var ffcProbeRunning = false
+    @Volatile private var ffcProbeCancelled = false
     private var demoFpa: Double? = null
     private val shutterRegex = Regex("\"shutterTemperature\"\\s*:\\s*([0-9.]+)")
     private val ffcStateRegex = Regex("\"ffcState\"\\s*:\\s*\"([A-Za-z_]+)\"")
@@ -86,16 +122,16 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
             when (intent.action) {
                 ACTION_PERMISSION -> {
                     val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
-                    DiagLog.log("Дозвіл (екран перегляду): ${if (granted) "надано" else "відхилено"}")
-                    if (granted) startCamera() else showMessage("Дозвіл на доступ до камери відхилено", persistent = true)
+                    DiagLog.log("Permission (live view): ${if (granted) "granted" else "denied"}")
+                    if (granted) startCamera() else showEmptyMessage(R.string.msg_permission_denied)
                 }
 
                 UsbManager.ACTION_USB_DEVICE_DETACHED -> {
                     val d = IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
                     if (d?.vendorId == UsbReport.FLIR_VENDOR_ID && !demo) {
-                        DiagLog.log("Камеру відключено")
+                        DiagLog.log("Camera detached")
                         stopPipeline()
-                        showMessage("Камеру відключено", persistent = true)
+                        showEmptyMessage(R.string.msg_camera_disconnected)
                     }
                 }
             }
@@ -104,13 +140,17 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
 
     private val ticker = object : Runnable {
         override fun run() {
+            updateTopBar()
             updateHud()
-            if (calPanel.visibility == View.VISIBLE) updateCalText()
+            ensureAutoTuning()
+            if (calCard.visibility == View.VISIBLE) updateCalText()
             ui.postDelayed(this, 300)
         }
     }
 
     private val saveSettingsRunnable = Runnable { settings.save() }
+
+    // ---------------------------------------------------------------- lifecycle
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -121,42 +161,94 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         settings = AppSettings(this)
         settings.applyTo(radiometry)
 
-        demo = intent.getBooleanExtra(EXTRA_DEMO, false)
-        selfTest = intent.getBooleanExtra(EXTRA_SELFTEST, false)
+        // The demo player and the self-test are developer tools of debuggable builds only; they are started from adb.
+        demo = debuggable && intent.getBooleanExtra(EXTRA_DEMO, false)
+        selfTest = debuggable && intent.getBooleanExtra(EXTRA_SELFTEST, false)
+        // Self-test only (debug): optionally switch the app language first. A fresh launch from adb switches the language and the
+        // activity is recreated; the recreated instance runs the test; any later recreation (e.g. when the language is restored)
+        // behaves as a normal screen, so the test can never loop.
+        val testLang = intent.getStringExtra(EXTRA_SELFTEST_LANG)
+        var runSelfTest = false
+        if (selfTest) {
+            val prefs = getSharedPreferences("selftest", Context.MODE_PRIVATE)
+            if (savedInstanceState == null) {
+                val current = AppCompatDelegate.getApplicationLocales().toLanguageTags()
+                if (testLang != null && current != testLang) {
+                    prefs.edit().putString("prevLang", current).putBoolean("pending", true).apply()
+                    AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(testLang))
+                } else {
+                    runSelfTest = true
+                }
+            } else if (prefs.getBoolean("pending", false)) {
+                prefs.edit().putBoolean("pending", false).apply()
+                runSelfTest = true
+            } else {
+                selfTest = false
+                demo = false
+            }
+        }
 
+        rootView = findViewById(R.id.root)
         thermalView = findViewById(R.id.thermalView)
         thermalView.settings = settings
+        thermalView.texts = buildTexts()
         thermalView.listener = this
+        topBar = findViewById(R.id.topBar)
+        statusPill = findViewById(R.id.statusPill)
+        batteryIcon = findViewById(R.id.batteryIcon)
+        batteryIcon.setImageDrawable(batteryDrawable)
+        batteryText = findViewById(R.id.batteryText)
+        fpsText = findViewById(R.id.fpsText)
         bottomBar = findViewById(R.id.bottomBar)
-        calPanel = findViewById(R.id.calPanel)
-        calText = findViewById(R.id.calText)
-        btnMode = findViewById(R.id.btnMode)
-        btnPalette = findViewById(R.id.btnPalette)
         btnVideo = findViewById(R.id.btnVideo)
+        videoIcon = findViewById(R.id.videoIcon)
+        videoTimer = findViewById(R.id.videoTimer)
+        cardHost = findViewById(R.id.cardHost)
+        calCard = findViewById(R.id.calCard)
+        calText = findViewById(R.id.calText)
+        alignCard = findViewById(R.id.alignCard)
+        alignInfo = findViewById(R.id.alignInfo)
 
-        btnMode.setOnClickListener {
-            settings.mode = settings.mode.next()
-            settings.save()
-            refreshButtons()
+        settingsPanel = SettingsPanel(this, findViewById(R.id.settingsHost))
+        findViewById<ImageButton>(R.id.btnSettings).setOnClickListener {
+            hideCards()
+            settingsPanel.toggle()
         }
-        btnPalette.setOnClickListener {
-            settings.palette = settings.palette.next()
-            settings.save()
-            refreshButtons()
-        }
-        findViewById<Button>(R.id.btnPhoto).setOnClickListener { takePhoto() }
+        findViewById<View>(R.id.btnPhoto).setOnClickListener { takePhoto() }
         btnVideo.setOnClickListener { toggleRecording() }
-        findViewById<Button>(R.id.btnMenu).setOnClickListener { showMenu() }
+
         findViewById<Button>(R.id.btnCalAdd).setOnClickListener { calibrationAddPoint() }
         findViewById<Button>(R.id.btnCalReset).setOnClickListener { calibrationReset() }
-        findViewById<Button>(R.id.btnCalClose).setOnClickListener { calPanel.visibility = View.GONE }
-        refreshButtons()
+        findViewById<Button>(R.id.btnCalClose).setOnClickListener { hideCards() }
+        findViewById<Button>(R.id.btnAlignLeft).setOnClickListener { alignChange(dx = 0.005f) }
+        findViewById<Button>(R.id.btnAlignRight).setOnClickListener { alignChange(dx = -0.005f) }
+        findViewById<Button>(R.id.btnAlignUp).setOnClickListener { alignChange(dy = 0.005f) }
+        findViewById<Button>(R.id.btnAlignDown).setOnClickListener { alignChange(dy = -0.005f) }
+        findViewById<Button>(R.id.btnAlignSmaller).setOnClickListener { alignChange(ds = 0.01f) }
+        findViewById<Button>(R.id.btnAlignBigger).setOnClickListener { alignChange(ds = -0.01f) }
+        findViewById<Button>(R.id.btnAlignReset).setOnClickListener { settings.alignment = Alignment(); alignChange() }
+        findViewById<Button>(R.id.btnAlignDone).setOnClickListener { hideCards() }
+
+        sound.load(MediaActionSound.SHUTTER_CLICK)
+        sound.load(MediaActionSound.START_VIDEO_RECORDING)
+        sound.load(MediaActionSound.STOP_VIDEO_RECORDING)
+
+        // Keep the controls clear of the display cutout.
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, insets ->
+            val i = insets.getInsets(WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.systemBars())
+            contentInsets = i
+            topBar.updatePadding(left = dp(8) + i.left, top = dp(8) + i.top, right = dp(8) + i.right)
+            bottomBar.updatePadding(bottom = dp(16) + i.bottom)
+            cardHost.updatePadding(left = dp(8) + i.left, right = dp(8) + i.right)
+            insets
+        }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when {
-                    calPanel.visibility == View.VISIBLE -> calPanel.visibility = View.GONE
-                    uiHidden -> setUiHidden(false)
+                    settingsPanel.isShown -> settingsPanel.hide()
+                    calCard.visibility == View.VISIBLE || alignCard.visibility == View.VISIBLE -> hideCards()
+                    controlsHidden -> setControlsHidden(false)
                     else -> {
                         isEnabled = false
                         onBackPressedDispatcher.onBackPressed()
@@ -171,12 +263,17 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         }
         ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
 
-        // Діагностичний самотест (запускається з adb): працює в демо-режимі й не залежить від видимості вікна.
-        if (selfTest) {
+        updateRotation()
+        refreshRecordingUi()
+        updateTopBar()
+
+        // Diagnostic self-test (started from adb in debug builds): runs in demo mode, independent of window visibility.
+        if (runSelfTest) {
             demo = true
             startDemo()
-            runSelfTest()
+            SelfTest(this, testLang).start()
         }
+        handleDebugIntent(intent)
     }
 
     override fun onStart() {
@@ -184,6 +281,13 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         ui.post(ticker)
         if (selfTest) return
         if (demo) startDemo() else ensureStarted()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (!selfTest && !demo && camera?.isRunning != true) ensureStarted()
+        handleDebugIntent(intent)
     }
 
     override fun onStop() {
@@ -195,6 +299,7 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
     override fun onDestroy() {
         unregisterReceiver(receiver)
         if (selfTest) stopPipeline()
+        sound.release()
         super.onDestroy()
     }
 
@@ -205,7 +310,7 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        thermalView.postInvalidateOnAnimation()
+        updateRotation()
     }
 
     private fun hideSystemBars() {
@@ -214,12 +319,72 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         c.hide(WindowInsetsCompat.Type.systemBars())
     }
 
-    // ---------------------------------------------------------------- запуск/зупинка
+    internal fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    /** Size of the root view in pixels (or the test override). */
+    internal fun viewSize(): Pair<Int, Int> {
+        testViewSize?.let { return it }
+        val dm = resources.displayMetrics
+        return Pair(rootView.width.takeIf { it > 0 } ?: dm.widthPixels, rootView.height.takeIf { it > 0 } ?: dm.heightPixels)
+    }
+
+    /** While the full-screen settings are open, the bars and the overlays under it are hidden, so nothing ghosts through. */
+    internal fun onSettingsVisibility(shown: Boolean) {
+        thermalView.overlaysSuppressed = shown
+        val v = when {
+            shown -> View.INVISIBLE
+            controlsHidden -> View.GONE
+            else -> View.VISIBLE
+        }
+        topBar.visibility = v
+        bottomBar.visibility = v
+        thermalView.postInvalidateOnAnimation()
+    }
+
+    internal fun appLocale(): Locale = resources.configuration.locales[0]
+
+    private fun fmt1(x: Double): String = String.format(appLocale(), "%.1f", x)
+
+    private fun buildTexts() = UiTexts(
+        locale = appLocale(),
+        waitingForCalibration = getString(R.string.note_waiting_ffc),
+        shutterCalibration = getString(R.string.note_ffc),
+        demoNote = getString(R.string.note_demo),
+        emissivityFormat = getString(R.string.note_emissivity_fmt),
+    )
+
+    // ---------------------------------------------------------------- orientation
+
+    @Suppress("DEPRECATION")
+    private fun displayRotationDegrees(): Int {
+        forcedDisplayRotation?.let { return it }
+        return when ((getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.rotation) {
+            Surface.ROTATION_90 -> 90
+            Surface.ROTATION_180 -> 180
+            Surface.ROTATION_270 -> 270
+            else -> 0
+        }
+    }
+
+    /** Recomputes the effective image rotation from the screen orientation and the user's settings. */
+    internal fun updateRotation() {
+        settings.rotation = Orientation.effective(settings.autoRotate, settings.rotationOffset, displayRotationDegrees())
+        thermalView.postInvalidateOnAnimation()
+    }
+
+    /** Called by the settings panel after any display-related setting changed. */
+    internal fun onSettingsChanged() {
+        updateRotation()
+        settings.applyTo(radiometry)
+        thermalView.postInvalidateOnAnimation()
+    }
+
+    // ---------------------------------------------------------------- start / stop
 
     private fun ensureStarted() {
         val device = usbManager.deviceList.values.firstOrNull { it.vendorId == UsbReport.FLIR_VENDOR_ID }
         if (device == null) {
-            showMessage("Камеру не знайдено. Підключіть FLIR ONE Pro до USB-C порту (або відкрийте демо в головному меню).", persistent = true)
+            showEmptyMessage(R.string.msg_no_camera)
             return
         }
         if (!usbManager.hasPermission(device)) {
@@ -227,10 +392,10 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
                 permissionAsked = true
                 val intent = Intent(ACTION_PERMISSION).setPackage(packageName)
                 val pending = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_MUTABLE)
-                DiagLog.log("Запит дозволу для ${device.deviceName}")
+                DiagLog.log("Requesting permission for ${device.deviceName}")
                 usbManager.requestPermission(device, pending)
             }
-            showMessage("Очікую дозвіл на доступ до камери…", persistent = true)
+            showEmptyMessage(R.string.msg_wait_permission)
             return
         }
         startCamera()
@@ -240,9 +405,17 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         resetFrameState()
         radiometry = Radiometry()
         settings.applyTo(radiometry)
-        processor = FrameProcessor(applicationContext, settings, radiometry, thermalView).also {
+        // A quick restart does not make the camera calibrate its shutter again, so reuse a recent calibration meanwhile.
+        if (!demo) {
+            radiometry.fallbackAnchor = Radiometry.recentAnchor(System.currentTimeMillis())
+            if (radiometry.fallbackAnchor != null) DiagLog.log("Using the shutter calibration of the previous session until a new one arrives")
+        }
+        thermalView.clear()
+        processor = FrameProcessor(applicationContext, settings, radiometry, thermalView, buildTexts()).also {
             it.onPhotoSaved = { name ->
-                runOnUiThread { toast(if (name != null) "Фото збережено: $name" else "Не вдалося зберегти фото") }
+                runOnUiThread {
+                    toast(if (name != null) getString(R.string.toast_photo_saved_fmt, name) else getString(R.string.toast_photo_failed))
+                }
             }
             it.start()
         }
@@ -253,11 +426,11 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         val device = usbManager.deviceList.values.firstOrNull { it.vendorId == UsbReport.FLIR_VENDOR_ID } ?: return
         newPipeline()
         if (statsLog == null) statsLog = FrameStatsLog(this)
-        DiagLog.log("=== Запуск потоку (${device.deviceName}) ===")
+        DiagLog.log("=== Starting the stream (${device.deviceName}) ===")
         val cam = FlirCamera(usbManager, device, this)
         camera = cam
         if (cam.start()) {
-            showMessage("Очікую перший кадр…", persistent = true)
+            showEmptyMessage(R.string.msg_wait_first_frame)
         } else {
             camera = null
             processor?.shutdown()
@@ -268,18 +441,22 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
     private fun startDemo() {
         if (demoSource != null) return
         newPipeline()
-        // Опорна точка для демо: взята з перевірених вимірювань (кімната/мороз).
+        // Anchor for the demo, taken from verified measurements (room / freezer).
         radiometry.setAnchor(Radiometry.Anchor(3845.0, 304.92, 305.21))
         demoFpa = 305.4
-        DiagLog.log("=== Запуск демо ===")
-        // У самотесті кадри подаються швидше (20/с), щоб перевірити запас продуктивності.
-        val src = DemoSource(File(filesDir, "frames"), if (selfTest) 50L else DemoSource.FRAME_MS) { handleFrame(it) }
+        DiagLog.log("=== Starting the demo ===")
+        // The self-test feeds frames faster (20/s) to check the performance headroom.
+        val src = DemoSource(FrameStore.dir(this), if (selfTest) 50L else DemoSource.FRAME_MS) { handleFrame(it) }
         demoSource = src
         src.start()
-        showMessage("Демо: програються збережені кадри", persistent = false)
+        showEmptyMessage(R.string.msg_demo_running)
+        ui.postDelayed({
+            if (demoSource === src && src.frameCount == 0 && frameCount == 0) showEmptyMessage(R.string.msg_demo_no_frames)
+        }, 1500)
     }
 
     private fun stopPipeline() {
+        ffcProbeCancelled = true
         stopRecording(wait = false)
         demoSource?.shutdown()
         demoSource = null
@@ -298,28 +475,32 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         fps = 0f
         ffcActive = false
         dropAfterFfc = false
+        lastFfcState = null
+        autoTuningEnsured = false
+        lastFfcActivityAt = 0L
         demoFpa = null
         battery = BatteryState()
     }
 
-    // ---------------------------------------------------------------- прийом кадрів (потік USB або демо)
+    // ---------------------------------------------------------------- frames (USB or demo thread)
 
     override fun onFrame(frame: FlirFrame) = handleFrame(frame)
 
     override fun onState(message: String) {
-        DiagLog.log("Стан: $message")
-        showMessage(message, persistent = true)
+        DiagLog.log("State: $message")
     }
 
     override fun onLost() {
         ui.post {
             stopPipeline()
-            showMessage("Зв'язок із камерою втрачено (її відключено?). Підключіть камеру знову й відкрийте екран заново.", persistent = true)
+            showEmptyMessage(R.string.msg_connection_lost)
         }
     }
 
     override fun onServiceMessage(json: String) {
         battery = ServiceMessages.updateBattery(battery, json)
+        // Everything except the battery reports is logged: replies to our commands (e.g. the shutter-calibration search) end up here.
+        if ("attery" !in json) DiagLog.log("[service] ${json.take(300)}")
     }
 
     private fun handleFrame(frame: FlirFrame) {
@@ -333,27 +514,33 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
             fpsStart = now
             fpsFrames = 0
         }
-        if (frameCount == 1) ui.post { clearPersistentMessage() }
 
         val raw = ThermalImage.decode(frame, IntArray(ThermalImage.W * ThermalImage.H))
         val stats = raw?.let { ThermalImage.stats(it) }
         val status = frame.statusText(400)
+        val ffcStateNow = ffcStateRegex.find(status)?.groupValues?.get(1)
+        if (ffcStateNow != lastFfcState) {
+            DiagLog.log("[ffc] state ${lastFfcState ?: "-"} -> ${ffcStateNow ?: "-"}; status: ${status.take(300)}")
+            lastFfcState = ffcStateNow
+        }
+        if (ffcStateNow == FFC_STATE_PROGRESS) lastFfcActivityAt = now
         val shutterK = shutterRegex.find(status)?.groupValues?.get(1)?.toDoubleOrNull()
         val tele = ThermalImage.telemetry(frame)
-        val fpaK = demoFpa ?: tele?.let { it[24] / 100.0 } // слово 24 телеметрії Lepton: температура сенсора, сК
+        val fpaK = demoFpa ?: tele?.let { it[24] / 100.0 } // Lepton telemetry word 24: sensor temperature, centikelvin
 
         if (stats != null && !demo) {
             radiometry.onFrame(frame.isFfc, stats, shutterK, fpaK)
             logFrameStats(frame, stats, status, shutterK, tele, fpaK)
         }
         if (frameCount == 1 || frameCount % 100 == 0) {
-            DiagLog.log("Кадр #$frameCount: thermal=${frame.thermalSize} jpg=${frame.jpgSize} fps=${String.format(Locale.US, "%.1f", fps)} ffc=${frame.isFfc}")
+            DiagLog.log("Frame #$frameCount: thermal=${frame.thermalSize} jpg=${frame.jpgSize} fps=${String.format(Locale.US, "%.1f", fps)} ffc=${frame.isFfc}")
         }
 
-        // Під час FFC і на наступному кадрі тепловий вміст не оновлюємо.
+        // The thermal content is not updated during the shutter calibration and on the next frame.
         var valid = false
         if (frame.isFfc) {
             ffcActive = true
+            lastFfcActivityAt = now
         } else if (ffcActive) {
             ffcActive = false
             dropAfterFfc = true
@@ -362,10 +549,10 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         } else {
             valid = raw != null
         }
-        processor?.submit(FrameSample(frame, raw, valid, fpaK, fps))
+        processor?.submit(FrameSample(frame, raw, valid, fpaK))
     }
 
-    /** Рядок CSV: сирі значення кадру, температура затвора, слова 20..31 телеметрії та обчислені температури. */
+    /** One CSV row: raw frame statistics, shutter temperature, Lepton telemetry words 20..31 and the computed temperatures. */
     private fun logFrameStats(frame: FlirFrame, s: ThermalStats, status: String, shutterK: Double?, tele: IntArray?, fpaK: Double?) {
         val ffcState = ffcStateRegex.find(status)?.groupValues?.get(1) ?: ""
         val tw = if (tele != null) (20..31).joinToString(",") { tele[it].toString() } else ",,,,,,,,,,,"
@@ -378,7 +565,7 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         )
     }
 
-    // ---------------------------------------------------------------- екран і повідомлення
+    // ---------------------------------------------------------------- top bar, messages
 
     override fun onCrosshairMoved(u: Float, v: Float) {
         ui.removeCallbacks(saveSettingsRunnable)
@@ -386,55 +573,64 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
     }
 
     override fun onTap() {
-        if (uiHidden) setUiHidden(false)
+        if (controlsHidden) setControlsHidden(false)
     }
 
-    private fun setUiHidden(hidden: Boolean) {
-        uiHidden = hidden
-        bottomBar.visibility = if (hidden) View.GONE else View.VISIBLE
-        if (hidden) calPanel.visibility = View.GONE
-        if (hidden) toast("Торкніться екрана, щоб повернути інтерфейс")
-    }
-
-    private fun refreshButtons() {
-        btnMode.text = "Режим: " + when (settings.mode) {
-            DisplayMode.MSX -> "MSX"
-            DisplayMode.THERMAL -> "Тепло"
-            DisplayMode.VISIBLE -> "Звичайна"
+    internal fun setControlsHidden(hidden: Boolean) {
+        controlsHidden = hidden
+        val v = if (hidden) View.GONE else View.VISIBLE
+        topBar.visibility = v
+        bottomBar.visibility = v
+        if (hidden) {
+            hideCards()
+            toast(getString(R.string.toast_controls_hidden))
         }
-        btnPalette.text = settings.palette.label
-        btnPalette.isEnabled = settings.mode != DisplayMode.VISIBLE
-        btnVideo.text = if (recorder != null) "■ Стоп" else "● Відео"
     }
 
-    private fun showMessage(text: String, persistent: Boolean = false, ms: Long = 4000) {
-        message = text
-        messageUntil = if (persistent) Long.MAX_VALUE else SystemClock.elapsedRealtime() + ms
+    /** Frame rate and battery in the top-right pill (shown only while frames are coming). */
+    private fun updateTopBar() {
+        val streaming = processor != null && frameCount > 0
+        statusPill.visibility = if (streaming) View.VISIBLE else View.INVISIBLE
+        val b = battery
+        val pct = b.percentage
+        if (pct != null) {
+            batteryIcon.visibility = View.VISIBLE
+            batteryText.visibility = View.VISIBLE
+            batteryDrawable.update(pct, b.charging == true)
+            batteryText.text = getString(R.string.battery_fmt, pct)
+        } else {
+            batteryIcon.visibility = View.GONE
+            batteryText.visibility = View.GONE
+        }
+        fpsText.text = getString(R.string.fps_fmt, fmt1(fps.toDouble()))
+        recorder?.takeIf { it.isRecording }?.let { r ->
+            val sec = r.elapsedMs() / 1000
+            videoTimer.text = String.format(Locale.US, "%d:%02d", sec / 60, sec % 60)
+        }
+    }
+
+    /** Message shown in the middle of the empty screen (no picture yet). */
+    private fun showEmptyMessage(resId: Int) {
+        message = getString(resId)
         ui.post { updateHud() }
     }
 
-    private fun clearPersistentMessage() {
-        if (messageUntil == Long.MAX_VALUE) message = null
-        updateHud()
-    }
-
     private fun updateHud() {
-        val msg = message?.takeIf { SystemClock.elapsedRealtime() < messageUntil }
-        thermalView.hud = Hud(battery, recorder?.takeIf { it.isRecording }?.elapsedMs(), msg, demo)
+        val overlayOpen = settingsPanel.isShown || calCard.visibility == View.VISIBLE || alignCard.visibility == View.VISIBLE
+        thermalView.hud = Hud(message, demo, showNotes = !overlayOpen)
     }
 
-    private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()
+    internal fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()
 
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
-
-    // ---------------------------------------------------------------- фото й відео
+    // ---------------------------------------------------------------- photo and video
 
     private fun takePhoto() {
         val p = processor
-        if (p == null) {
-            toast("Немає зображення для збереження")
+        if (p == null || thermalView.currentFrame() == null) {
+            toast(getString(R.string.toast_no_image))
             return
         }
+        sound.play(MediaActionSound.SHUTTER_CLICK)
         p.requestPhoto()
     }
 
@@ -444,114 +640,236 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
             return
         }
         val p = processor
-        if (p == null) {
-            toast("Немає зображення для запису")
+        if (p == null || thermalView.currentFrame() == null) {
+            toast(getString(R.string.toast_no_image))
             return
         }
         val rotated = settings.rotation % 180 != 0
         val rec = VideoRecorder(applicationContext, if (rotated) VIDEO_H else VIDEO_W, if (rotated) VIDEO_W else VIDEO_H)
         if (!rec.start()) {
-            toast("Не вдалося почати запис відео")
+            toast(getString(R.string.toast_video_start_failed))
             return
         }
+        sound.play(MediaActionSound.START_VIDEO_RECORDING)
         recorder = rec
         p.recorder = rec
-        refreshButtons()
-        showMessage("Запис відео розпочато")
+        refreshRecordingUi()
     }
 
     private fun stopRecording(wait: Boolean) {
         val rec = recorder ?: return
         recorder = null
         processor?.recorder = null
+        sound.play(MediaActionSound.STOP_VIDEO_RECORDING)
         val finish = {
             val name = rec.stop()
-            runOnUiThread { toast(if (name != null) "Відео збережено: $name" else "Відео не збережено (запис надто короткий?)") }
+            runOnUiThread {
+                toast(if (name != null) getString(R.string.toast_video_saved_fmt, name) else getString(R.string.toast_video_failed))
+            }
         }
         if (wait) finish() else Thread(finish, "flir-rec-stop").start()
-        refreshButtons()
+        refreshRecordingUi()
     }
 
-    // ---------------------------------------------------------------- меню
+    /** The video button turns red with a stop icon and a timer while recording. */
+    internal fun refreshRecordingUi(rec: Boolean = recorder != null) {
+        btnVideo.background = ContextCompat.getDrawable(this, if (rec) R.drawable.bg_round_button_rec else R.drawable.bg_round_button)
+        videoIcon.setImageResource(if (rec) R.drawable.ic_stop else R.drawable.ic_videocam)
+        videoTimer.visibility = if (rec) View.VISIBLE else View.GONE
+        if (rec) videoTimer.text = "0:00"
+        btnVideo.contentDescription = getString(if (rec) R.string.cd_video_stop else R.string.cd_video)
+    }
 
-    private fun showMenu() {
-        val items = arrayOf(
-            "Випромінювальна здатність: ${String.format(Locale.US, "%.2f", settings.emissivity)}",
-            "Відбита температура: ${String.format(Locale.US, "%.0f", settings.reflectedC)} °C",
-            "Калібрування температури…",
-            "Сила контурів MSX: ${listOf("слабка", "середня", "сильна")[settings.msxLevel.coerceIn(0, 2)]}",
-            "Вирівнювання MSX…",
-            "Маркери гарячої/холодної точок: ${if (settings.showMarkers) "увімк." else "вимк."}",
-            "Шкала температур: ${if (settings.showScale) "увімк." else "вимк."}",
-            "Поворот зображення: ${settings.rotation}°",
-            "Дзеркало: ${if (settings.mirror) "увімк." else "вимк."}",
-            "Хрестик у центр",
-            "Сховати інтерфейс",
-            "Зберегти сирий кадр (для аналізу)",
-        )
-        AlertDialog.Builder(this).setTitle("Меню").setItems(items) { _, which ->
-            when (which) {
-                0 -> showEmissivityDialog()
-                1 -> promptNumber("Відбита температура, °C", "Температура навколишніх предметів (зазвичай кімнатна).", settings.reflectedC.toString()) {
-                    settings.reflectedC = it.coerceIn(-50.0, 200.0)
-                    radiometry.reflectedC = settings.reflectedC
-                    settings.save()
-                }
+    // ---------------------------------------------------------------- settings actions
 
-                2 -> openCalibrationPanel()
-                3 -> {
-                    settings.msxLevel = (settings.msxLevel + 1) % 3
-                    settings.save()
-                    showMessage("Сила контурів: ${listOf("слабка", "середня", "сильна")[settings.msxLevel]}")
-                }
+    internal fun currentLanguageTag(): String = if (appLocale().language == "uk") "uk" else "en"
 
-                4 -> showAlignDialog()
-                5 -> { settings.showMarkers = !settings.showMarkers; settings.save() }
-                6 -> { settings.showScale = !settings.showScale; settings.save() }
-                7 -> { settings.rotation = (settings.rotation + 90) % 360; settings.save() }
-                8 -> { settings.mirror = !settings.mirror; settings.save() }
-                9 -> { settings.crossU = 0.5f; settings.crossV = 0.5f; settings.save() }
-                10 -> setUiHidden(true)
-                11 -> {
-                    val f = lastFrame
-                    val name = if (f != null) FrameStore.save(this, f, "manual") else null
-                    toast(if (name != null) "Збережено сирий кадр: $name" else "Не вдалося зберегти кадр")
-                }
+    internal fun setLanguage(tag: String) {
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
+    }
+
+    private val debuggable: Boolean
+        get() = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+    /**
+     * Developer tool (debuggable builds only): sends raw JSON commands to the camera once frames are flowing, so that the
+     * camera's reactions can be studied from adb. Commands are separated by "@@"; the gap between them is in milliseconds.
+     */
+    private fun handleDebugIntent(i: Intent) {
+        if (!debuggable) return
+        val raw = i.getStringExtra(EXTRA_SEND_JSON) ?: return
+        i.removeExtra(EXTRA_SEND_JSON)
+        val gap = i.getIntExtra(EXTRA_SEND_GAP, 3000).toLong()
+        val commands = raw.split("@@").map { it.trim() }.filter { it.isNotEmpty() }
+        Thread({
+            val end = SystemClock.elapsedRealtime() + 20_000
+            while (SystemClock.elapsedRealtime() < end && !(camera?.isRunning == true && frameCount > 0)) Thread.sleep(200)
+            val cam = camera
+            if (cam == null) {
+                DiagLog.log("[debug] no camera to send to")
+                return@Thread
             }
-        }.setNegativeButton("Закрити", null).show()
+            for (c in commands) {
+                val ok = cam.sendJson(c)
+                DiagLog.log("[debug] sent $c -> $ok")
+                Thread.sleep(gap)
+            }
+        }, "flir-debug-send").start()
+    }
+
+    internal fun openDiagnostics() {
+        startActivity(Intent(this, DiagnosticsActivity::class.java))
+    }
+
+    internal fun saveRawFrame() {
+        val f = lastFrame
+        val name = if (f != null) FrameStore.save(this, f, "manual") else null
+        toast(if (name != null) getString(R.string.toast_raw_saved_fmt, name) else getString(R.string.toast_raw_failed))
+    }
+
+    // ---------------------------------------------------------------- manual shutter calibration
+
+    /**
+     * Makes the camera close its shutter and recalibrate now. The command is not publicly documented, so the first time the app
+     * searches for it (see [ShutterCalibration]); once found it is remembered and used directly.
+     */
+    internal fun requestShutterCalibration() {
+        val cam = camera
+        if (demo || cam == null || !cam.isRunning || frameCount == 0) {
+            toast(getString(R.string.ffc_not_connected))
+            return
+        }
+        if (ffcProbeRunning || ffcInProgress()) {
+            toast(getString(R.string.ffc_busy))
+            return
+        }
+        val known = settings.ffcCommand
+        if (known != null) {
+            val t0 = SystemClock.elapsedRealtime()
+            val sent = cam.sendJson(known)
+            DiagLog.log("[ffc] manual request $known -> $sent (camera state: $lastFfcState)")
+            toast(getString(R.string.ffc_requested))
+            ui.postDelayed({
+                if (camera === cam && lastFfcActivityAt < t0) {
+                    DiagLog.log("[ffc] the camera did not start a calibration (state: $lastFfcState)")
+                    toast(getString(R.string.ffc_no_reaction))
+                }
+            }, ShutterCalibration.RESPONSE_WINDOW_MS + 1000)
+            return
+        }
+        MaterialAlertDialogBuilder(this).setTitle(R.string.ffc_probe_title)
+            .setMessage(R.string.ffc_probe_message)
+            .setPositiveButton(R.string.btn_start) { _, _ -> startShutterCommandSearch(cam) }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
+    }
+
+    /** True while the shutter is closed or a calibration has just started. */
+    private fun ffcInProgress(): Boolean =
+        ffcActive || lastFfcState == FFC_STATE_PROGRESS || SystemClock.elapsedRealtime() - lastFfcActivityAt < 800
+
+    /** True while the camera itself asks for a calibration. */
+    private fun ffcWanted(): Boolean = lastFfcState == FFC_STATE_DESIRED || lastFfcState == FFC_STATE_VALID_IMG
+
+    private fun startShutterCommandSearch(cam: FlirCamera) {
+        ffcProbeCancelled = false
+        ffcProbeRunning = true
+        DiagLog.log("[ffc] searching for the shutter-calibration command (${ShutterCalibration.CANDIDATES.size} candidates)")
+        val progress = MaterialAlertDialogBuilder(this).setTitle(R.string.ffc_probe_title)
+            .setMessage(R.string.ffc_probe_running)
+            .setCancelable(false)
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> ffcProbeCancelled = true }
+            .show()
+        Thread({
+            val result = try {
+                ShutterCalibration.probe(
+                    candidates = ShutterCalibration.CANDIDATES,
+                    send = { cam.sendJson(it) },
+                    ffcStartedSince = { lastFfcActivityAt >= it },
+                    ffcInProgress = { ffcInProgress() },
+                    calibrationWanted = { ffcWanted() },
+                    now = { SystemClock.elapsedRealtime() },
+                    sleep = { Thread.sleep(it) },
+                    log = { DiagLog.log("[ffc] $it") },
+                    isCancelled = { ffcProbeCancelled || camera !== cam },
+                )
+            } finally {
+                ffcProbeRunning = false
+            }
+            DiagLog.log("[ffc] search finished: ${result.outcome}, tried ${result.tried}, command ${result.command}")
+            runOnUiThread {
+                if (!isDestroyed) progress.dismiss()
+                if (result.cancelled || isFinishing || isDestroyed) return@runOnUiThread
+                val found = result.command
+                if (found != null) {
+                    settings.ffcCommand = found
+                    settings.save()
+                }
+                val text = when (result.outcome) {
+                    ShutterCalibration.Outcome.FOUND -> getString(R.string.ffc_probe_found_fmt, found)
+                    ShutterCalibration.Outcome.NOT_FOUND -> getString(R.string.ffc_result_not_found_fmt, result.tried)
+                    ShutterCalibration.Outcome.NEVER_REQUESTED -> getString(R.string.ffc_result_never)
+                    ShutterCalibration.Outcome.AUTO_NOT_STOPPED -> getString(R.string.ffc_result_auto)
+                    ShutterCalibration.Outcome.CAMERA_BUSY -> getString(R.string.ffc_busy)
+                    ShutterCalibration.Outcome.COULD_NOT_SEND -> getString(R.string.ffc_result_send)
+                    ShutterCalibration.Outcome.CANCELLED -> ""
+                }
+                MaterialAlertDialogBuilder(this).setTitle(R.string.ffc_probe_title).setMessage(text)
+                    .setPositiveButton(R.string.btn_ok, null).show()
+            }
+        }, "flir-ffc-probe").start()
+    }
+
+    /**
+     * A search that was cut short (the app was closed in the middle, the cable was pulled) may have left the camera's automatic
+     * calibration switched off, so it is switched on once for every camera session.
+     */
+    private fun ensureAutoTuning() {
+        if (autoTuningEnsured || demo || ffcProbeRunning) return
+        val cam = camera ?: return
+        if (!cam.isRunning || frameCount == 0) return
+        autoTuningEnsured = true
+        Thread({ DiagLog.log("[ffc] automatic calibration ensured: ${cam.sendJson(ShutterCalibration.AUTO_ON)}") }, "flir-auto-on").start()
     }
 
     private val emissivityPresets = listOf(
-        "Без поправки" to 1.00,
-        "Шкіра людини" to 0.98,
-        "Вода, лід" to 0.96,
-        "Матовий пластик, гума, фарба" to 0.95,
-        "Цегла, бетон, папір" to 0.93,
-        "Скло" to 0.92,
-        "Дерево, тканина" to 0.90,
-        "Окиснений метал" to 0.80,
-        "Блискучий метал (дуже неточно)" to 0.20,
+        R.string.emis_none to 1.00,
+        R.string.emis_skin to 0.98,
+        R.string.emis_water to 0.96,
+        R.string.emis_plastic to 0.95,
+        R.string.emis_masonry to 0.93,
+        R.string.emis_glass to 0.92,
+        R.string.emis_wood to 0.90,
+        R.string.emis_oxidized to 0.80,
+        R.string.emis_shiny to 0.20,
     )
 
-    private fun showEmissivityDialog() {
-        val labels = emissivityPresets.map { String.format(Locale.US, "%.2f — %s", it.second, it.first) } + "Своє значення…"
+    internal fun openEmissivityDialog() {
+        val labels = emissivityPresets.map { String.format(Locale.US, "%.2f — %s", it.second, getString(it.first)) } + getString(R.string.emis_custom)
         val current = emissivityPresets.indexOfFirst { abs(it.second - settings.emissivity) < 0.005 }.let { if (it < 0) labels.lastIndex else it }
-        AlertDialog.Builder(this).setTitle("Випромінювальна здатність")
+        MaterialAlertDialogBuilder(this).setTitle(R.string.emis_title)
             .setSingleChoiceItems(labels.toTypedArray(), current) { d, which ->
                 d.dismiss()
                 if (which < emissivityPresets.size) {
                     setEmissivity(emissivityPresets[which].second)
                 } else {
-                    promptNumber("Своє значення (0.05–1.00)", null, String.format(Locale.US, "%.2f", settings.emissivity)) { setEmissivity(it) }
+                    promptNumber(getString(R.string.emis_custom_title), null, String.format(Locale.US, "%.2f", settings.emissivity)) { setEmissivity(it) }
                 }
-            }.setNegativeButton("Скасувати", null).show()
+            }.setNegativeButton(R.string.btn_cancel, null).show()
     }
 
     private fun setEmissivity(e: Double) {
         settings.emissivity = e.coerceIn(Radiometry.MIN_EMISSIVITY, 1.0)
         radiometry.emissivity = settings.emissivity
         settings.save()
-        showMessage(String.format(Locale.US, "Випромінювальна здатність: %.2f", settings.emissivity))
+    }
+
+    internal fun openReflectedDialog() {
+        promptNumber(getString(R.string.reflected_title), getString(R.string.reflected_hint), String.format(Locale.US, "%.0f", settings.reflectedC)) {
+            settings.reflectedC = it.coerceIn(-50.0, 200.0)
+            radiometry.reflectedC = settings.reflectedC
+            settings.save()
+        }
     }
 
     private fun promptNumber(title: String, hint: String?, initial: String, onOk: (Double) -> Unit) {
@@ -564,115 +882,110 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
             setPadding(dp(24), dp(8), dp(24), 0)
             addView(input)
         }
-        val b = AlertDialog.Builder(this).setTitle(title).setView(box)
+        val b = MaterialAlertDialogBuilder(this).setTitle(title).setView(box)
         if (hint != null) b.setMessage(hint)
-        b.setPositiveButton("OK") { _, _ ->
+        b.setPositiveButton(R.string.btn_ok) { _, _ ->
             val v = input.text.toString().replace(',', '.').toDoubleOrNull()
-            if (v == null) toast("Некоректне число") else onOk(v)
-        }.setNegativeButton("Скасувати", null).show()
+            if (v == null) toast(getString(R.string.err_invalid_number)) else onOk(v)
+        }.setNegativeButton(R.string.btn_cancel, null).show()
     }
 
-    // ---------------------------------------------------------------- вирівнювання MSX
+    // ---------------------------------------------------------------- edge alignment card
 
-    private fun showAlignDialog() {
+    private fun hideCards() {
+        calCard.visibility = View.GONE
+        alignCard.visibility = View.GONE
+    }
+
+    internal fun openAlignmentCard() {
         settings.mode = DisplayMode.MSX
-        refreshButtons()
-        val info = TextView(this).apply { setPadding(dp(16), dp(12), dp(16), dp(4)) }
-        fun refresh() {
-            val a = settings.alignment
-            info.text = String.format(Locale.US, "Зсув X %+.3f, зсув Y %+.3f, масштаб %.3f", a.dx, a.dy, a.scale)
-            thermalView.postInvalidateOnAnimation()
-        }
-        fun change(dx: Float = 0f, dy: Float = 0f, ds: Float = 0f) {
-            val a = settings.alignment
-            settings.alignment = a.copy(scale = (a.scale + ds).coerceIn(0.5f, 1.5f), dx = (a.dx + dx).coerceIn(-0.4f, 0.4f), dy = (a.dy + dy).coerceIn(-0.4f, 0.4f))
-            refresh()
-        }
-        fun button(text: String, action: () -> Unit) = Button(this).apply {
-            this.text = text
-            setOnClickListener { action() }
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        fun row(vararg b: Button) = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            b.forEach { addView(it) }
-        }
-        val col = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(info)
-            addView(row(button("◀ вліво") { change(dx = 0.005f) }, button("вправо ▶") { change(dx = -0.005f) }))
-            addView(row(button("▲ вгору") { change(dy = 0.005f) }, button("вниз ▼") { change(dy = -0.005f) }))
-            addView(row(button("Контури − ") { change(ds = 0.01f) }, button("Контури +") { change(ds = -0.01f) }))
-            addView(row(button("Скинути") { settings.alignment = Alignment(); refresh() }))
-        }
-        refresh()
-        val d = AlertDialog.Builder(this).setTitle("Вирівнювання контурів")
-            .setMessage("Стрілки зсувають контури видимої камери відносно теплової картинки.")
-            .setView(col).setPositiveButton("Готово") { _, _ -> settings.save() }.create()
-        d.window?.apply {
-            clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            setGravity(android.view.Gravity.BOTTOM)
-        }
-        d.show()
+        settings.save()
+        hideCards()
+        alignCard.visibility = View.VISIBLE
+        alignChange()
     }
 
-    // ---------------------------------------------------------------- калібрування температури
+    private fun alignChange(dx: Float = 0f, dy: Float = 0f, ds: Float = 0f) {
+        val a = settings.alignment
+        settings.alignment = a.copy(
+            scale = (a.scale + ds).coerceIn(0.5f, 1.5f),
+            dx = (a.dx + dx).coerceIn(-0.4f, 0.4f),
+            dy = (a.dy + dy).coerceIn(-0.4f, 0.4f),
+        )
+        settings.save()
+        val n = settings.alignment
+        val f = { x: Float -> String.format(appLocale(), "%+.3f", x) }
+        alignInfo.text = getString(R.string.align_info_fmt, f(n.dx), f(n.dy), String.format(appLocale(), "%.3f", n.scale))
+        thermalView.postInvalidateOnAnimation()
+    }
 
-    private fun openCalibrationPanel() {
-        calPanel.visibility = View.VISIBLE
+    // ---------------------------------------------------------------- calibration card
+
+    internal fun openCalibrationCard() {
+        hideCards()
+        calCard.visibility = View.VISIBLE
         updateCalText()
     }
 
-    private fun updateCalText() {
+    internal fun updateCalText() {
         val vf = thermalView.currentFrame()?.second
-        val live = vf?.cross?.tempC?.let { String.format(Locale.US, "%.1f °C", it) } ?: "—"
+        val live = vf?.cross?.tempC?.let { String.format(appLocale(), "%.1f °C", it) } ?: "—"
         val pts = settings.calibrationPoints
         val fit = TempCalibration.fit(pts)
-        val mode = if (pts.isEmpty()) "заводське" else if (fit.fittedSlope) "підгонка за ${pts.size} точками" else "зсув за ${pts.size} точк."
-        calText.text = String.format(
-            Locale.US,
-            "Калібрування: наведіть хрестик на предмет з відомою температурою.\nЗараз під хрестиком: %s   (ε %.2f)\nМасштаб %.1f, зсув %+.0f — %s",
-            live, settings.emissivity, fit.countsPerPhi, fit.offsetCounts, mode,
-        )
+        val mode = when {
+            pts.isEmpty() -> getString(R.string.cal_mode_factory)
+            fit.fittedSlope -> getString(R.string.cal_mode_fit_fmt, pts.size)
+            else -> getString(R.string.cal_mode_offset_fmt, pts.size)
+        }
+        val eps = String.format(appLocale(), "%.2f", settings.emissivity)
+        calText.text = getString(R.string.cal_hint) + "\n" +
+            getString(R.string.cal_live_fmt, live, eps) + "\n" +
+            getString(R.string.cal_params_fmt, fmt1(fit.countsPerPhi), String.format(appLocale(), "%+.0f", fit.offsetCounts), mode)
     }
 
     private fun calibrationAddPoint() {
-        val p = processor
-        val s = p?.calibrationSample()
+        val s = processor?.calibrationSample()
         if (s == null) {
-            toast("Немає даних: дочекайтесь картинки та калібрування затвором")
+            toast(getString(R.string.cal_no_data))
             return
         }
-        promptNumber("Справжня температура під хрестиком, °C", "Ви вимірюєте предмет під хрестиком — введіть показання вашого термометра.", s.tempC?.let { String.format(Locale.US, "%.1f", it) } ?: "") {
-            addCalibrationPoint(it, s)
-        }
+        promptNumber(
+            getString(R.string.cal_prompt_title),
+            getString(R.string.cal_prompt_hint),
+            s.tempC?.let { String.format(Locale.US, "%.1f", it) } ?: "",
+        ) { addCalibrationPoint(it, s) }
     }
 
-    /** Додає еталонну точку, підганяє модель, зберігає. Повертає опис результату. */
-    fun addCalibrationPoint(trueC: Double, s: CalSample): String {
+    /** Adds a reference point, refits the model and saves. Returns a description of the result. */
+    internal fun addCalibrationPoint(trueC: Double, s: CalSample): String {
         val pt = radiometry.calibrationPoint(s.relative, s.phiShutter, trueC, radiometry.emissivity, radiometry.reflectedC)
         settings.calibrationPoints = (settings.calibrationPoints + pt).takeLast(TempCalibration.MAX_POINTS)
         settings.applyTo(radiometry)
         settings.save()
         val fit = TempCalibration.fit(settings.calibrationPoints)
-        val text = String.format(Locale.US, "Еталон додано. Масштаб %.1f, зсув %+.0f (%s)", fit.countsPerPhi, fit.offsetCounts, if (fit.fittedSlope) "повна підгонка" else "лише зсув")
-        DiagLog.log("Калібрування: $text; точок ${settings.calibrationPoints.size}")
-        showMessage(text)
+        val text = getString(
+            R.string.cal_added_fmt,
+            fmt1(fit.countsPerPhi),
+            String.format(appLocale(), "%+.0f", fit.offsetCounts),
+            getString(if (fit.fittedSlope) R.string.cal_fit_full else R.string.cal_fit_offset_only),
+        )
+        DiagLog.log("Calibration: $text; points ${settings.calibrationPoints.size}")
+        toast(text)
         updateCalText()
         return text
     }
 
-    private fun calibrationReset() {
+    internal fun calibrationReset() {
         settings.calibrationPoints = emptyList()
         settings.applyTo(radiometry)
         settings.save()
-        showMessage("Калібрування скинуто до заводського")
+        toast(getString(R.string.cal_reset_done))
         updateCalText()
     }
 
-    // ---------------------------------------------------------------- самотест (adb)
+    // ---------------------------------------------------------------- helpers for the self-test
 
-    private fun onUiAndWait(block: () -> Unit) {
+    internal fun onUiAndWait(block: () -> Unit) {
         val latch = CountDownLatch(1)
         runOnUiThread {
             try {
@@ -684,107 +997,27 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         latch.await()
     }
 
-    private fun snapshotView(w: Int, h: Int, file: File) {
-        val bm = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        onUiAndWait {
-            thermalView.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY))
-            thermalView.layout(0, 0, w, h)
-            updateHud()
-            thermalView.draw(Canvas(bm))
-        }
-        FileOutputStream(file).use { bm.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    internal fun refreshForTest() {
+        updateTopBar()
+        updateHud()
     }
 
-    private fun runSelfTest() {
-        Thread({
-            try {
-                DiagLog.log("SELFTEST: старт")
-                Thread.sleep(3500)
-                val dir = File(filesDir, "snapshots").apply { mkdirs() }
-                dir.listFiles()?.forEach { it.delete() }
-                for (rot in intArrayOf(0, 90)) {
-                    for (m in DisplayMode.entries) {
-                        onUiAndWait { settings.mode = m; settings.rotation = rot }
-                        Thread.sleep(900)
-                        val w = if (rot == 0) 1080 else 1080
-                        val h = if (rot == 0) 1500 else 1500
-                        snapshotView(w, h, File(dir, "view_${m.name}_$rot.png"))
-                    }
-                }
-                // Продуктивність: по 4 с у кожному режимі, див. рядки «Обробка кадру» в лозі.
-                for (m in DisplayMode.entries) {
-                    onUiAndWait { settings.rotation = 0; settings.mode = m }
-                    Thread.sleep(4500)
-                }
-                onUiAndWait { settings.mode = DisplayMode.MSX }
-                Thread.sleep(600)
-
-                // Калібрування: еталонна точка під хрестиком.
-                val s = processor?.calibrationSample()
-                if (s != null) {
-                    var out = ""
-                    onUiAndWait { out = addCalibrationPoint(s.tempC ?: 25.0, s) }
-                    DiagLog.log("SELFTEST: калібрування: $out")
-                    onUiAndWait { calibrationReset() }
-                } else {
-                    DiagLog.log("SELFTEST: немає зразка для калібрування")
-                }
-
-                // Фото (у приватний файл, не в галерею) та відео (у приватний файл).
-                val frame = thermalView.currentFrame()
-                if (frame != null) {
-                    val bm = processor?.renderSnapshot(960, 720)
-                    if (bm != null) FileOutputStream(File(dir, "photo.png")).use { bm.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                }
-                val rec = VideoRecorder(applicationContext, VIDEO_W, VIDEO_H, File(dir, "test.mp4"))
-                if (rec.start()) {
-                    processor?.recorder = rec
-                    Thread.sleep(2500)
-                    processor?.recorder = null
-                    val name = rec.stop()
-                    DiagLog.log("SELFTEST: відео: $name, кадрів=${rec.framesEncoded}, розмір=${File(dir, "test.mp4").length()}")
-                } else {
-                    DiagLog.log("SELFTEST: відео не стартувало")
-                }
-
-                // Дотик: перевіряємо перетворення координат на пристрої.
-                onUiAndWait {
-                    settings.rotation = 90
-                    val t = thermalView
-                    t.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1500, View.MeasureSpec.EXACTLY))
-                    t.layout(0, 0, 1080, 1500)
-                    val tr = ViewTransform(1080f, 1500f, 4f / 3f, 90, false)
-                    val x = tr.toViewX(0.25f, 0.75f)
-                    val y = tr.toViewY(0.25f, 0.75f)
-                    val now = SystemClock.uptimeMillis()
-                    val down = android.view.MotionEvent.obtain(now, now, android.view.MotionEvent.ACTION_DOWN, x, y, 0)
-                    t.onTouchEvent(down)
-                    down.recycle()
-                    DiagLog.log("SELFTEST: дотик (0.25,0.75) через поворот 90° -> хрестик (${settings.crossU}, ${settings.crossV})")
-                    settings.rotation = 0
-                }
-                // Відновлюємо налаштування за замовчуванням, щоб тест нічого не лишив у застосунку.
-                onUiAndWait {
-                    settings.mode = DisplayMode.MSX
-                    settings.rotation = 0
-                    settings.crossU = 0.5f
-                    settings.crossV = 0.5f
-                    settings.calibrationPoints = emptyList()
-                    settings.applyTo(radiometry)
-                    settings.save()
-                }
-                DiagLog.log("SELFTEST: завершено")
-                runOnUiThread { finish() }
-            } catch (e: Exception) {
-                DiagLog.log("SELFTEST: помилка $e")
-            }
-        }, "flir-selftest").start()
+    internal fun openSettingsForTest(open: Boolean) {
+        if (open) settingsPanel.show() else settingsPanel.hide()
     }
+
+    internal fun hideCardsForTest() = hideCards()
 
     companion object {
         const val EXTRA_DEMO = "demo"
         const val EXTRA_SELFTEST = "selftest"
+        const val EXTRA_SELFTEST_LANG = "selftest_lang"
+        const val EXTRA_SEND_JSON = "send_json"
+        const val EXTRA_SEND_GAP = "send_gap_ms"
         private const val ACTION_PERMISSION = "com.exciteddev.flironepro.USB_PERMISSION_STREAM"
+        private const val FFC_STATE_PROGRESS = "FFC_PROGRESS"
+        private const val FFC_STATE_DESIRED = "FFC_DESIRED"
+        private const val FFC_STATE_VALID_IMG = "FFC_VALID_IMG"
         private const val VIDEO_W = 640
         private const val VIDEO_H = 480
     }

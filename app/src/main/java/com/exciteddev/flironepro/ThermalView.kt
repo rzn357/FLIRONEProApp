@@ -6,6 +6,9 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
@@ -14,8 +17,8 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 
 /**
- * Екран із зображенням: малює складену картинку з урахуванням повороту/дзеркала, накладення (хрестик, маркери, шкала, HUD)
- * і дозволяє пальцем рухати хрестик.
+ * The picture: draws the composed image with rotation / mirroring / fit-or-fill, the overlays (crosshair, markers,
+ * scale, notes) and lets the user drag the crosshair with a finger.
  */
 class ThermalView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
 
@@ -26,15 +29,26 @@ class ThermalView @JvmOverloads constructor(context: Context, attrs: AttributeSe
 
     var listener: Listener? = null
     var settings: AppSettings? = null
+
+    /** Hides the overlays (crosshair, markers, scale, notes) while the settings screen covers the picture. */
+    @Volatile var overlaysSuppressed = false
+
+    /** Localized overlay texts; must be set before the first frame is drawn. */
+    var texts: UiTexts? = null
+        set(value) {
+            field = value
+            painter = value?.let { OverlayPainter(resources.displayMetrics.density, it) }
+        }
+
     var hud: Hud? = null
         set(value) {
             field = value
             postInvalidateOnAnimation()
         }
 
-    private val painter = OverlayPainter(resources.displayMetrics.density)
+    private var painter: OverlayPainter? = null
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
-    private val emptyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.LTGRAY }
+    private val emptyPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFB0B0B0.toInt() }
     private val matrix = Matrix()
     private val srcPts = FloatArray(8)
     private val dstPts = FloatArray(8)
@@ -46,20 +60,34 @@ class ThermalView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     private var downX = 0f
     private var downY = 0f
     private var moved = false
+    private var dragging = false
+    private var startU = 0f
+    private var startV = 0f
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
 
-    /** Можна викликати з будь-якого потоку: кадри, що не встигли показатись, відкидаються. */
+    /** Can be called from any thread; frames that are not shown in time are dropped. */
     fun submit(bm: Bitmap, o: OverlayState) {
         pending.set(Pair(bm, o))
         postInvalidateOnAnimation()
     }
 
-    /** Поточний стан зображення для знімків. */
+    /** Current picture state (used for snapshots). */
     fun currentFrame(): Pair<Bitmap, OverlayState>? {
         val b = bitmap ?: return null
         val o = overlay ?: return null
         return Pair(b, o)
     }
+
+    /** Forget the last picture (the camera went away) so the empty state with its message is shown again. */
+    fun clear() {
+        pending.set(null)
+        bitmap = null
+        overlay = null
+        postInvalidateOnAnimation()
+    }
+
+    private fun transform(s: AppSettings, bm: Bitmap) =
+        ViewTransform(width.toFloat(), height.toFloat(), bm.width.toFloat() / bm.height, s.rotation, s.mirror, s.fillScreen)
 
     override fun onDraw(canvas: Canvas) {
         pending.getAndSet(null)?.let {
@@ -69,14 +97,18 @@ class ThermalView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         canvas.drawColor(Color.BLACK)
         val s = settings
         val bm = bitmap
-        if (s == null || bm == null) {
-            drawEmpty(canvas)
+        val p = painter
+        if (s == null || bm == null || p == null) {
+            // The empty-state message must not ghost through the translucent settings screen.
+            if (!overlaysSuppressed) drawEmpty(canvas)
             return
         }
-        val t = ViewTransform(width.toFloat(), height.toFloat(), bm.width.toFloat() / bm.height, s.rotation, s.mirror)
+        val t = transform(s, bm)
         fillMatrix(t, bm)
         canvas.drawBitmap(bm, matrix, bitmapPaint)
-        overlay?.let { painter.draw(canvas, t, it, s.crossU, s.crossV, s.alignment, s.showMarkers, s.showScale, hud) }
+        if (!overlaysSuppressed) {
+            overlay?.let { p.draw(canvas, t, it, s.crossU, s.crossV, s.alignment, s.showMarkers, s.showScale, hud) }
+        }
     }
 
     private fun fillMatrix(t: ViewTransform, bm: Bitmap) {
@@ -92,11 +124,28 @@ class ThermalView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         matrix.setPolyToPoly(srcPts, 0, dstPts, 0, 4)
     }
 
+    /** Empty state: a centered, wrapped message (e.g. "Camera not found"). */
     private fun drawEmpty(canvas: Canvas) {
+        val msg = hud?.message ?: return
         emptyPaint.textSize = 16f * resources.displayMetrics.density
-        emptyPaint.textAlign = Paint.Align.CENTER
-        val msg = hud?.message ?: "Очікую зображення…"
-        canvas.drawText(msg, width / 2f, height / 2f, emptyPaint)
+        val w = (width * 0.8f).toInt().coerceAtLeast(1)
+        val layout = StaticLayout.Builder.obtain(msg, 0, msg.length, emptyPaint, w)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .build()
+        canvas.save()
+        canvas.translate((width - w) / 2f, (height - layout.height) / 2f)
+        layout.draw(canvas)
+        canvas.restore()
+    }
+
+    /**
+     * True if a touch at (x, y) may start dragging the crosshair: it has to be on the picture itself (not on the empty bars
+     * around it) and outside the thin strips along the screen edges, where the system swipes (notification shade, navigation
+     * gestures) start.
+     */
+    private fun canStartDrag(x: Float, y: Float, s: AppSettings): Boolean {
+        val bm = bitmap ?: return false
+        return transform(s, bm).canStartDragAt(x, y, EDGE_GUARD_DP * resources.displayMetrics.density)
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
@@ -104,19 +153,34 @@ class ThermalView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = e.x; downY = e.y; moved = false
-                moveCrosshair(e.x, e.y, s)
+                dragging = canStartDrag(e.x, e.y, s)
+                if (dragging) {
+                    startU = s.crossU; startV = s.crossV
+                    moveCrosshair(e.x, e.y, s)
+                }
             }
 
             MotionEvent.ACTION_MOVE -> {
                 if (abs(e.x - downX) > slop || abs(e.y - downY) > slop) moved = true
-                moveCrosshair(e.x, e.y, s)
+                if (dragging) moveCrosshair(e.x, e.y, s)
             }
 
             MotionEvent.ACTION_UP -> {
+                dragging = false
                 if (!moved) {
                     performClick()
                     listener?.onTap()
                 }
+            }
+
+            MotionEvent.ACTION_CANCEL -> {
+                // The system took the gesture over (e.g. the notification shade): put the crosshair back where it was.
+                if (dragging) {
+                    s.crossU = startU
+                    s.crossV = startV
+                    postInvalidateOnAnimation()
+                }
+                dragging = false
             }
         }
         return true
@@ -129,7 +193,7 @@ class ThermalView @JvmOverloads constructor(context: Context, attrs: AttributeSe
 
     private fun moveCrosshair(x: Float, y: Float, s: AppSettings) {
         val bm = bitmap ?: return
-        val t = ViewTransform(width.toFloat(), height.toFloat(), bm.width.toFloat() / bm.height, s.rotation, s.mirror)
+        val t = transform(s, bm)
         val (cu, cv) = t.toContent(x, y)
         val mode = overlay?.mode ?: s.mode
         val a = s.alignment
@@ -139,5 +203,9 @@ class ThermalView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         s.crossV = v.coerceIn(0.01f, 0.99f)
         listener?.onCrosshairMoved(s.crossU, s.crossV)
         postInvalidateOnAnimation()
+    }
+
+    private companion object {
+        const val EDGE_GUARD_DP = 20f
     }
 }

@@ -12,7 +12,7 @@ class FlirFrameTest {
 
     private fun u32(v: Int) = byteArrayOf(v.toByte(), (v shr 8).toByte(), (v shr 16).toByte(), (v shr 24).toByte())
 
-    /** Складає кадр у форматі камери з заданих блоків. */
+    /** Builds a frame in the camera's format from the given blocks. */
     private fun buildFrame(thermal: ByteArray, jpg: ByteArray, status: ByteArray): ByteArray {
         val frameSize = thermal.size + jpg.size + status.size
         val header = ByteArray(28)
@@ -24,7 +24,7 @@ class FlirFrameTest {
         return header + thermal + jpg + status
     }
 
-    /** Теплові дані розкладки A: рядок 164 пікселі, 4 службові байти на початку і ще 4 посередині. Піксель (x,y) = y*160+x. */
+    /** Thermal data of layout A: a row is 164 pixels, 4 service bytes at the start and 4 more in the middle. Pixel (x,y) = y*160+x. */
     private fun layoutAThermal(): ByteArray {
         val t = ByteArray(4 + 120 * 164 * 2)
         for (y in 0 until 120) for (x in 0 until 160) {
@@ -121,8 +121,8 @@ class FlirFrameTest {
     @Test
     fun renderStretchesToFullRange() {
         val raw = IntArray(160 * 120) { 1000 + it % 100 }
-        raw[5] = 1000 // мінімум
-        raw[77] = 1099 // максимум
+        raw[5] = 1000 // minimum
+        raw[77] = 1099 // maximum
         val lut = Palettes.lut(Palette.GRAY)
         val out = IntArray(raw.size)
         val s = ThermalImage.render(raw, lut, out)
@@ -136,7 +136,7 @@ class FlirFrameTest {
     fun renderHandlesFlatImage() {
         val raw = IntArray(160 * 120) { 5000 }
         val out = IntArray(raw.size)
-        ThermalImage.render(raw, Palettes.lut(Palette.IRON), out) // не повинно ділити на нуль
+        ThermalImage.render(raw, Palettes.lut(Palette.IRON), out) // must not divide by zero
         assertEquals(out[0], out[100])
     }
 
@@ -154,7 +154,7 @@ class FlirFrameTest {
         assertEquals(14, tele[0])
         assertEquals(3138, tele[83])
         assertEquals(0x1234, tele[239])
-        // зображення бере тільки перші 240 пакетів і телеметрію не чіпає
+        // the image takes only the first 240 packets and does not touch the telemetry
         assertNotNull(ThermalImage.decode(frames[0]))
     }
 
@@ -179,7 +179,7 @@ class FlirFrameTest {
     fun crosshairDrawsAroundCenterWithoutOverflow() {
         val px = IntArray(160 * 120)
         ThermalImage.drawCrosshair(px, 1)
-        assertEquals(0, px[60 * 160 + 80]) // центр лишається вільним
+        assertEquals(0, px[60 * 160 + 80]) // the center stays free
         assertTrue(px.count { it == 1 } == 20)
     }
 

@@ -7,7 +7,7 @@ class FlirCommandTest {
 
     private fun hex(b: ByteArray) = b.joinToString("") { "%02x".format(it) }
 
-    /** Еталон: заголовки, які надсилає оригінальний додаток (перехоплені спільнотою). */
+    /** Reference: the headers sent by the original app (captured by the community). */
     @Test
     fun openFileHeaderMatchesKnownBytes() {
         val payload = FlirCommand.payload(FlirCommand.OPEN_CAMERA_FILES)

@@ -3,8 +3,8 @@ package com.exciteddev.flironepro
 import java.io.File
 
 /**
- * Демо-джерело кадрів: по колу «програє» збережені раніше сирі кадри (файли .bin у теці frames), так що весь інтерфейс
- * можна перевіряти без камери. Температури в демо неточні: кадри з різних сеансів мають різні опорні рівні.
+ * Demo frame source: replays the raw frames saved earlier (.bin files in the frames folder) in a loop, so the whole UI
+ * can be tested without a camera. Demo temperatures are not accurate: frames from different sessions have different reference levels.
  */
 class DemoSource(
     private val dir: File,

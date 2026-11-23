@@ -49,7 +49,7 @@ class FlirMessageParserTest {
     @Test
     fun skipsGarbageAndBadCrc() {
         val j = """{"ok":true}"""
-        val bad = msg("""{"bad":1}""").also { it[12] = (it[12] + 1).toByte() } // зіпсований CRC
+        val bad = msg("""{"bad":1}""").also { it[12] = (it[12] + 1).toByte() } // corrupted CRC
         val garbage = ByteArray(30) { 0x55 }
         assertEquals(listOf(j), run(7, garbage + bad + garbage + msg(j)))
     }

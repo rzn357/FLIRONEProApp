@@ -2,20 +2,17 @@ package com.exciteddev.flironepro
 
 import kotlin.math.abs
 
-enum class Palette(val label: String) {
-    IRON("Залізо"),
-    RAINBOW("Веселка"),
-    GRAY("Біле гаряче"),
-    BLACK_HOT("Чорне гаряче"),
-    LAVA("Жар"),
-    ARCTIC("Арктика"),
-    ;
-
-    fun next(): Palette = entries[(ordinal + 1) % entries.size]
+enum class Palette {
+    IRON,
+    RAINBOW,
+    GRAY,
+    BLACK_HOT,
+    LAVA,
+    ARCTIC,
 }
 
 object Palettes {
-    /** 256 кольорів ARGB для заданої палітри. */
+    /** 256 ARGB colors for the given palette (index 0 = coldest, 255 = hottest). */
     fun lut(p: Palette): IntArray = IntArray(256) { i ->
         val t = i / 255f
         when (p) {
@@ -72,7 +69,7 @@ object Palettes {
         return rgb(last[1].toInt(), last[2].toInt(), last[3].toInt())
     }
 
-    /** Синій (холодно) -> червоний (гаряче). */
+    /** Blue (cold) -> red (hot). */
     private fun rainbow(t: Float): Int {
         val h = (1f - t) * 240f / 60f // 0..4
         val x = 1f - abs(h % 2f - 1f)
@@ -100,7 +97,7 @@ class ThermalStats(
     val mean: Int = 0,
 )
 
-/** Мінімум і максимум згладженого теплового зображення (для маркерів «найхолодніша/найгарячіша точка»). */
+/** Minimum and maximum of the smoothed thermal image (for the hottest / coldest point markers). */
 class Extremes(
     val minX: Int,
     val minY: Int,
@@ -115,11 +112,11 @@ object ThermalImage {
     const val H = 120
 
     /**
-     * Дістає 160x120 сирих 16-бітних значень з кадру. Повертає null, якщо розмір теплового блоку
-     * не відповідає жодній відомій розкладці (тоді кадр треба аналізувати вручну).
+     * Extracts the 160x120 raw 16-bit values from a frame. Returns null if the thermal block size does not match
+     * any known layout (then the frame has to be analyzed manually).
      *
-     * Розкладка A: рядок = 164 "пікселі" (по 4 байти службового заголовка перед кожною половиною рядка).
-     * Розкладка B: щільні 160 пікселів на рядок.
+     * Layout A: a row is 164 "pixels" (4 bytes of service header before each half of the row).
+     * Layout B: a dense 160 pixels per row.
      */
     fun decode(frame: FlirFrame, out: IntArray = IntArray(W * H)): IntArray? {
         val d = frame.data
@@ -150,10 +147,10 @@ object ThermalImage {
     fun layoutName(thermalSize: Int): String = when {
         thermalSize >= W_STRIDE_A * H * 2 + 4 -> "A(164)"
         thermalSize >= W * H * 2 -> "B(160)"
-        else -> "невідома"
+        else -> "unknown"
     }
 
-    /** Мін/макс/середнє/центр (2x2) сирих значень. */
+    /** Min / max / mean / center (2x2) of the raw values. */
     fun stats(raw: IntArray): ThermalStats {
         var min = Int.MAX_VALUE
         var max = Int.MIN_VALUE
@@ -170,7 +167,7 @@ object ThermalImage {
         return ThermalStats(min, max, center, minI % W, minI / W, maxI % W, maxI / W, (sum / raw.size).toInt())
     }
 
-    /** Лінійне розтягування min..max на 256 кольорів. Заповнює out (ARGB) і повертає статистику. */
+    /** Linear stretch of min..max over 256 colors. Fills out (ARGB) and returns the statistics. */
     fun render(raw: IntArray, lut: IntArray, out: IntArray, stats: ThermalStats = stats(raw)): ThermalStats {
         val delta = maxOf(1, stats.max - stats.min)
         for (i in raw.indices) {
@@ -179,7 +176,7 @@ object ThermalImage {
         return stats
     }
 
-    /** Білий хрестик у центрі кадру (з проміжком), щоб було видно, куди «дивиться» вимірювання центру. */
+    /** White crosshair in the center of the frame (with a gap), showing where the center measurement looks. */
     fun drawCrosshair(pixels: IntArray, color: Int = 0xFFFFFFFF.toInt()) {
         val cx = W / 2
         val cy = H / 2
@@ -191,7 +188,7 @@ object ThermalImage {
         }
     }
 
-    /** Середнє по 3x3 (краї повторюються). out має розмір W*H. */
+    /** 3x3 mean (edges are replicated). out has size W*H. */
     fun smooth3(raw: IntArray, out: IntArray) {
         for (y in 0 until H) {
             val ya = maxOf(0, y - 1) * W
@@ -207,7 +204,7 @@ object ThermalImage {
         }
     }
 
-    /** Мінімум і максимум (без 2-піксельної рамки, де часто артефакти) у вже згладженому зображенні. */
+    /** Minimum and maximum (ignoring a 2-pixel border where artifacts are common) of an already smoothed image. */
     fun extremes(smoothed: IntArray): Extremes {
         var minV = Int.MAX_VALUE
         var maxV = Int.MIN_VALUE
@@ -223,7 +220,7 @@ object ThermalImage {
         return Extremes(minI % W, minI / W, minV, maxI % W, maxI / W, maxV)
     }
 
-    /** Середнє по 3x3 навколо піксела (u,v - нормалізовані координати теплового кадру). */
+    /** 3x3 mean around a pixel (u,v are normalized thermal-frame coordinates). */
     fun sample3(raw: IntArray, u: Float, v: Float): Double {
         val cx = (u * W).toInt().coerceIn(0, W - 1)
         val cy = (v * H).toInt().coerceIn(0, H - 1)
@@ -241,8 +238,8 @@ object ThermalImage {
     }
 
     /**
-     * 240 слів телеметрії Lepton з останніх 3 пакетів теплового блоку (240..242), або null, якщо блок коротший.
-     * Слова 20..31 містять лічильник кадрів, середнє по кадру, температури FPA і корпусу тощо.
+     * The 240 Lepton telemetry words from the last 3 packets (240..242) of the thermal block, or null if the block is
+     * shorter. Words 20..31 hold the frame counter, the frame mean, the sensor and housing temperatures, etc.
      */
     fun telemetry(frame: FlirFrame): IntArray? {
         val last = 243 * PACKET

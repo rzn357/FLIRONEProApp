@@ -1,12 +1,7 @@
 package com.exciteddev.flironepro
 
-/** Стан батареї камери (приходить у службових JSON-повідомленнях на EP 0x81). */
-class BatteryState(val percentage: Int? = null, val voltage: Double? = null, val charging: Boolean? = null) {
-    fun label(): String {
-        val p = percentage ?: return ""
-        return if (charging == true) "Бат. $p% (заряджається)" else "Бат. $p%"
-    }
-}
+/** State of the camera's battery (arrives in service JSON messages on EP 0x81). */
+class BatteryState(val percentage: Int? = null, val voltage: Double? = null, val charging: Boolean? = null)
 
 object ServiceMessages {
     private val percentageRegex = Regex("\"percentage\"\\s*:\\s*(-?\\d+)")
@@ -14,7 +9,7 @@ object ServiceMessages {
     private val chargingStateRegex = Regex("\"chargingState\"\\s*:\\s*\"([A-Za-z]+)\"")
     private val chargingCurrentRegex = Regex("\"chargingCurrent\"\\s*:\\s*(-?[0-9.]+)")
 
-    /** Оновлює стан батареї за JSON-повідомленням. Повідомлення не про батарею повертають попередній стан без змін. */
+    /** Updates the battery state from a JSON message. Messages that are not about the battery return the previous state unchanged. */
     fun updateBattery(prev: BatteryState, json: String): BatteryState {
         return when {
             "batteryVoltageUpdate" in json -> {

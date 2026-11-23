@@ -1,135 +1,369 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
 
+    <!-- The image fills the whole screen; everything else is drawn over it -->
     <com.exciteddev.flironepro.ThermalView
         android:id="@+id/thermalView"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_height="match_parent" />
 
+    <!-- Bottom bar: only the photo and video buttons -->
     <LinearLayout
-        android:id="@+id/calPanel"
+        android:id="@+id/bottomBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:padding="16dp">
+
+        <FrameLayout
+            android:id="@+id/btnPhoto"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:background="@drawable/bg_round_button"
+            android:clickable="true"
+            android:contentDescription="@string/cd_photo"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_photo" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/btnVideo"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:layout_marginStart="32dp"
+            android:background="@drawable/bg_round_button"
+            android:clickable="true"
+            android:contentDescription="@string/cd_video"
+            android:focusable="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/videoIcon"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_videocam" />
+
+                <TextView
+                    android:id="@+id/videoTimer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/white"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- Tool cards (calibration, edge alignment) just below the top bar -->
+    <FrameLayout
+        android:id="@+id/cardHost"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#E6101010"
-        android:orientation="vertical"
-        android:padding="8dp"
-        android:visibility="gone">
-
-        <TextView
-            android:id="@+id/calText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
+        android:layout_gravity="top"
+        android:layout_marginTop="64dp"
+        android:paddingHorizontal="8dp">
 
         <LinearLayout
+            android:id="@+id/calCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
 
-            <Button
-                android:id="@+id/btnCalAdd"
-                android:layout_width="0dp"
+            <TextView
+                android:id="@+id/calTitle"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
-                android:layout_weight="1.4"
-                android:text="@string/cal_add"
+                android:text="@string/cal_title"
+                android:textColor="@color/accent_amber"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/calText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:lineSpacingMultiplier="1.1"
+                android:textColor="@color/text_primary_on_dark"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnCalAdd"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1.4"
+                    android:text="@string/cal_add"
+                    android:textColor="@color/accent_amber"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnCalReset"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/cal_reset"
+                    android:textColor="@color/accent_amber"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnCalClose"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/btn_close"
+                    android:textColor="@color/accent_amber"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/alignCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/align_title"
+                android:textColor="@color/accent_amber"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/align_hint"
+                android:textColor="@color/text_secondary_on_dark"
                 android:textSize="12sp" />
 
-            <Button
-                android:id="@+id/btnCalReset"
-                android:layout_width="0dp"
+            <TextView
+                android:id="@+id/alignInfo"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
-                android:layout_weight="1"
-                android:text="@string/cal_reset"
-                android:textSize="12sp" />
+                android:layout_marginTop="4dp"
+                android:textColor="@color/text_primary_on_dark"
+                android:textSize="13sp" />
 
-            <Button
-                android:id="@+id/btnCalClose"
-                android:layout_width="0dp"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/cal_close"
-                android:textSize="12sp" />
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnAlignLeft"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:maxLines="1"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="@string/align_left"
+                    android:textColor="@color/accent_amber"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnAlignRight"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:maxLines="1"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="@string/align_right"
+                    android:textColor="@color/accent_amber"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnAlignUp"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:maxLines="1"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="@string/align_up"
+                    android:textColor="@color/accent_amber"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnAlignDown"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:maxLines="1"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="@string/align_down"
+                    android:textColor="@color/accent_amber"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnAlignSmaller"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:maxLines="1"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="@string/align_smaller"
+                    android:textColor="@color/accent_amber"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnAlignBigger"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:maxLines="1"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="@string/align_bigger"
+                    android:textColor="@color/accent_amber"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnAlignReset"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:maxLines="1"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="@string/align_reset"
+                    android:textColor="@color/accent_amber"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnAlignDone"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:maxLines="1"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="@string/btn_done"
+                    android:textColor="@color/accent_amber"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Top bar: settings gear (left), battery and frame rate (right). Nothing else. -->
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="8dp">
+
+        <ImageButton
+            android:id="@+id/btnSettings"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/cd_settings"
+            android:padding="10dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_settings" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <LinearLayout
+            android:id="@+id/statusPill"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_pill"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp"
+            android:visibility="invisible">
+
+            <ImageView
+                android:id="@+id/batteryIcon"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:importantForAccessibility="no" />
+
+            <TextView
+                android:id="@+id/batteryText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:textColor="@color/text_primary_on_dark"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/fpsText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:textColor="@color/text_primary_on_dark"
+                android:textSize="13sp"
+                android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/bottomBar"
+    <!-- Settings panel host (full-screen, drawn above everything else; content is built in code) -->
+    <FrameLayout
+        android:id="@+id/settingsHost"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="#E6000000"
-        android:orientation="horizontal">
+        android:layout_height="match_parent"
+        android:visibility="gone" />
 
-        <Button
-            android:id="@+id/btnMode"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1.3"
-            android:maxLines="1"
-            android:minWidth="0dp"
-            android:paddingHorizontal="4dp"
-            android:text="@string/mode"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/btnPalette"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1.3"
-            android:maxLines="1"
-            android:minWidth="0dp"
-            android:paddingHorizontal="4dp"
-            android:text="@string/palette"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/btnPhoto"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:maxLines="1"
-            android:minWidth="0dp"
-            android:paddingHorizontal="4dp"
-            android:text="@string/photo"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/btnVideo"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:maxLines="1"
-            android:minWidth="0dp"
-            android:paddingHorizontal="4dp"
-            android:text="@string/video"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/btnMenu"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:maxLines="1"
-            android:minWidth="0dp"
-            android:paddingHorizontal="4dp"
-            android:text="@string/menu"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
-    </LinearLayout>
-
-</LinearLayout>
+</FrameLayout>

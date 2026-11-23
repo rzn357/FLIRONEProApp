@@ -7,8 +7,8 @@ import java.io.File
 import java.io.FileWriter
 
 /**
- * CSV зі статистикою кожного кадру (сирі значення, температури з телеметрії та статусу) - матеріал для калібрування
- * сирих значень у градуси. Файл: filesDir/frame_stats.csv, дописується між запусками.
+ * CSV with per-frame statistics (raw values, temperatures from telemetry and status) - material for calibrating
+ * raw values to degrees. File: filesDir/frame_stats_v2.csv, appended between launches.
  */
 class FrameStatsLog(context: Context) {
     private val file = File(context.applicationContext.filesDir, "frame_stats_v2.csv")

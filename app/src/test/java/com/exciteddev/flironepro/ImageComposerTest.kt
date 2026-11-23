@@ -32,7 +32,7 @@ class ImageComposerTest {
         for (x in 0 until W) {
             val v = r(out[100 * W + x])
             assertTrue("x=$x v=$v prev=$prev", v >= prev)
-            assertTrue("стрибок між сусідніми пікселями має бути малим", prev < 0 || v - prev <= 3)
+            assertTrue("the jump between neighbouring pixels must be small", prev < 0 || v - prev <= 3)
             prev = v
         }
         assertNear(0, r(out[100 * W]), 3)
@@ -57,13 +57,13 @@ class ImageComposerTest {
 
     @Test
     fun alignmentZoomsIntoCentralPart() {
-        // джерело: ліва половина чорна, права біла; тепловий кадр охоплює центральну частину
+        // source: the left half is black, the right half is white; the thermal frame covers the central part
         val src = IntArray(W * H) { if (it % W < W / 2) 0 else 255 }
         val out = IntArray(W * H)
         ImageComposer.alignLuma(src, W, H, Alignment(0.5f, 0f, 0f), out)
         assertNear(0, out[240 * W + W / 2 - 40], 1)
         assertNear(255, out[240 * W + W / 2 + 40], 1)
-        // біля країв кадру теж маємо відповідні сторони межі
+        // near the frame edges we still get the matching sides of the boundary
         assertNear(0, out[240 * W + 10], 1)
         assertNear(255, out[240 * W + W - 10], 1)
     }
@@ -73,7 +73,7 @@ class ImageComposerTest {
         val src = IntArray(W * H) { if (it % W < W / 2) 0 else 255 }
         val out = IntArray(W * H)
         ImageComposer.alignLuma(src, W, H, Alignment(1f, 0.25f, 0f), out)
-        // dx = +0,25: видима зона зсунута вправо, межа (0,5) тепер на u = 0,25
+        // dx = +0.25: the visible zone is shifted to the right, the boundary (0.5) is now at u = 0.25
         assertNear(0, out[240 * W + (0.25 * W).toInt() - 20], 1)
         assertNear(255, out[240 * W + (0.25 * W).toInt() + 20], 1)
     }
@@ -86,7 +86,7 @@ class ImageComposerTest {
         assertEquals(0, hp[240 * W + 50])
         assertEquals(0, hp[240 * W + W - 50])
         assertTrue(Math.abs(hp[240 * W + W / 2]) > 5 || Math.abs(hp[240 * W + W / 2 - 1]) > 5)
-        // по різні боки краю знак різний (темніше / світліше)
+        // the sign differs on the two sides of the edge (darker / lighter)
         assertTrue(hp[240 * W + W / 2 - 2] < 0)
         assertTrue(hp[240 * W + W / 2 + 1] > 0)
     }
@@ -97,7 +97,7 @@ class ImageComposerTest {
         val hp = IntArray(W * H)
         hp[0] = 50
         hp[1] = -50
-        hp[2] = 1 // у «мертвій зоні» - без змін
+        hp[2] = 1 // inside the dead zone - unchanged
         ImageComposer.applyMsx(thermal, hp, 1.0f)
         assertTrue(r(thermal[0]) > 0x80)
         assertTrue(r(thermal[1]) < 0x80)
@@ -134,8 +134,8 @@ class ImageComposerTest {
     @Test
     fun smoothAndExtremesIgnoreBorderAndNoise() {
         val raw = IntArray(160 * 120) { 3000 }
-        raw[0] = 0 // шум на краю кадру - не повинен стати мінімумом
-        raw[60 * 160 + 100] = 3600 // «гаряча» ділянка
+        raw[0] = 0 // noise at the frame edge - must not become the minimum
+        raw[60 * 160 + 100] = 3600 // a "hot" area
         raw[59 * 160 + 100] = 3600
         raw[61 * 160 + 100] = 3600
         raw[60 * 160 + 99] = 3600
@@ -147,7 +147,7 @@ class ImageComposerTest {
         assertEquals(100, ex.maxX)
         assertEquals(60, ex.maxY)
         assertTrue(ex.minValue >= 2400 && ex.minValue < 3000)
-        // після згладжування 3x3 мінімум однаковий для всіх 9 сусідів піксела, тож позиція - будь-яка з них
+        // after the 3x3 smoothing the minimum is the same for all 9 neighbours of the pixel, so the position is any of them
         assertTrue(ex.minX in 29..31)
         assertTrue(ex.minY in 19..21)
     }
@@ -156,9 +156,9 @@ class ImageComposerTest {
     fun sample3AveragesNeighbourhood() {
         val raw = IntArray(160 * 120) { 100 }
         raw[60 * 160 + 80] = 1000
-        // 9 пікселів: один 1000, вісім по 100 -> 200
+        // 9 pixels: one 1000, eight 100 -> 200
         assertEquals(200.0, ThermalImage.sample3(raw, 80.5f / 160, 60.5f / 120), 0.001)
-        // біля краю не виходить за межі
+        // near the edge it does not go out of bounds
         assertEquals(100.0, ThermalImage.sample3(raw, 0f, 0f), 0.001)
         assertEquals(100.0, ThermalImage.sample3(raw, 1f, 1f), 0.001)
     }

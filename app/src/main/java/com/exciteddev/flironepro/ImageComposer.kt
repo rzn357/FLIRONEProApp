@@ -4,8 +4,8 @@ import kotlin.math.abs
 import kotlin.math.floor
 
 /**
- * Збирає картинку для показу: розфарбоване й плавно збільшене теплове зображення та накладання контурів
- * видимої камери (MSX). Працює над масивами, без залежності від Android, щоб тестуватись на комп'ютері.
+ * Composes the displayed picture: the colorized, smoothly enlarged thermal image and the overlay of the visible camera's
+ * edges (MSX). Works on arrays with no Android dependency, so it can be unit-tested on a computer.
  */
 object ImageComposer {
     const val OUT_W = 640
@@ -14,7 +14,7 @@ object ImageComposer {
     private const val SRC_W = ThermalImage.W
     private const val SRC_H = ThermalImage.H
 
-    // Таблиці білінійної інтерполяції 160x120 -> 640x480.
+    // Bilinear interpolation tables 160x120 -> 640x480.
     private val colX0 = IntArray(OUT_W)
     private val colX1 = IntArray(OUT_W)
     private val colFx = FloatArray(OUT_W)
@@ -43,7 +43,7 @@ object ImageComposer {
         }
     }
 
-    /** Робочі буфери, щоб не виділяти пам'ять на кожен кадр. */
+    /** Work buffers, so memory is not allocated for every frame. */
     class Scratch {
         val luma = IntArray(OUT_W * OUT_H)
         val tmp = IntArray(OUT_W * OUT_H)
@@ -52,7 +52,7 @@ object ImageComposer {
         val hp = IntArray(OUT_W * OUT_H)
     }
 
-    /** Теплове 160x120 (сирі значення) -> 640x480 ARGB за палітрою на діапазоні lo..hi, із білінійним згладжуванням. */
+    /** Thermal 160x120 (raw values) -> 640x480 ARGB with the palette over the range lo..hi, bilinearly smoothed. */
     fun thermalToArgb(raw: IntArray, lo: Double, hi: Double, lut: IntArray, out: IntArray) {
         val scale = 255.0 / maxOf(1.0, hi - lo)
         val row = FloatArray(SRC_W)
@@ -72,7 +72,7 @@ object ImageComposer {
         }
     }
 
-    /** Яскравість (0..255) з ARGB-пікселів. */
+    /** Luma (0..255) from ARGB pixels. */
     fun lumaFromArgb(argb: IntArray, count: Int, out: IntArray) {
         for (i in 0 until count) {
             val p = argb[i]
@@ -81,8 +81,8 @@ object ImageComposer {
     }
 
     /**
-     * Яскравість видимого кадру srcW x srcH -> сітка теплового кадру OUT_W x OUT_H за вирівнюванням (білінійно).
-     * Поза межами видимого кадру координати обрізаються до краю.
+     * Luma of the visible frame srcW x srcH -> the thermal frame grid OUT_W x OUT_H according to the alignment (bilinear).
+     * Coordinates outside the visible frame are clamped to the edge.
      */
     fun alignLuma(src: IntArray, srcW: Int, srcH: Int, a: Alignment, out: IntArray) {
         val sx0 = IntArray(OUT_W)
@@ -113,7 +113,7 @@ object ImageComposer {
         }
     }
 
-    /** Усереднення по (2r+1)x(2r+1) із повторенням країв; розділюване, тому швидке. */
+    /** Averaging over (2r+1)x(2r+1) with edge replication; separable, hence fast. */
     fun boxBlur(src: IntArray, dst: IntArray, tmp: IntArray, w: Int, h: Int, r: Int) {
         val div = 2 * r + 1
         for (y in 0 until h) {
@@ -135,7 +135,7 @@ object ImageComposer {
         }
     }
 
-    /** Високочастотна складова (контури): m(r=1) - m(r=5). */
+    /** High-frequency component (edges): m(r=1) - m(r=5). */
     fun highPass(luma: IntArray, w: Int, h: Int, s: Scratch, out: IntArray) {
         boxBlur(luma, s.small, s.tmp, w, h, 1)
         boxBlur(luma, s.large, s.tmp, w, h, 5)
@@ -143,8 +143,8 @@ object ImageComposer {
     }
 
     /**
-     * MSX: додає контури до кольорового теплового зображення (на місці). gain - сила накладання,
-     * дрібний шум (|hp| ≤ DEADZONE) відкидається.
+     * MSX: adds the edges to the colorized thermal image (in place). gain is the overlay strength,
+     * small noise (|hp| <= DEADZONE) is discarded.
      */
     fun applyMsx(thermal: IntArray, hp: IntArray, gain: Float) {
         for (i in thermal.indices) {
@@ -160,14 +160,14 @@ object ImageComposer {
         }
     }
 
-    /** Повна склейка MSX: теплове + контури з видимої яскравості srcW x srcH. */
+    /** Full MSX composition: thermal + edges from the visible luma srcW x srcH. */
     fun msx(thermalArgb: IntArray, visibleLuma: IntArray, srcW: Int, srcH: Int, a: Alignment, gain: Float, s: Scratch) {
         alignLuma(visibleLuma, srcW, srcH, a, s.luma)
         highPass(s.luma, OUT_W, OUT_H, s, s.hp)
         applyMsx(thermalArgb, s.hp, gain)
     }
 
-    /** Найбільша абсолютна величина контурної складової (для тестів/налагодження). */
+    /** Largest absolute value of the edge component (for tests / debugging). */
     fun maxAbs(a: IntArray): Int = a.maxOf { abs(it) }
 
     private const val DEADZONE = 2

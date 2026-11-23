@@ -12,12 +12,12 @@ import java.io.FileOutputStream
 import java.io.OutputStream
 
 /**
- * USB-шар для FLIR ONE (VID 09CB, PID 1996).
+ * USB layer for the FLIR ONE (VID 09CB, PID 1996).
  *
- * Послідовність запуску відтворює відомий з протоколу спільноти порядок:
- *   claim інтерфейсів 0,1,2 -> SET_INTERFACE(alt 0) для 2 і 1 -> SET_INTERFACE(alt 1) для 1 ->
- *   SET_INTERFACE(alt 1) для 2 -> читання кадрів з bulk IN 0x85.
- * Нічого не записується у прошивку чи налаштування камери.
+ * The start sequence reproduces the order known from the community protocol description:
+ *   claim interfaces 0,1,2 -> SET_INTERFACE(alt 0) for 2 and 1 -> SET_INTERFACE(alt 1) for 1 ->
+ *   SET_INTERFACE(alt 1) for 2 -> read frames from bulk IN 0x85.
+ * Nothing is written to the camera's firmware or settings.
  */
 class FlirCamera(
     private val manager: UsbManager,
@@ -28,10 +28,10 @@ class FlirCamera(
         fun onFrame(frame: FlirFrame)
         fun onState(message: String)
 
-        /** Зв'язок з камерою втрачено (наприклад, її відключили). Викликається з потоку читання. */
+        /** The connection to the camera was lost (e.g. it was unplugged). Called from the reader thread. */
         fun onLost()
 
-        /** JSON-повідомлення камери (батарея, інформація про плату тощо). Викликається з потоку прийому. */
+        /** A JSON message from the camera (battery, board information, etc.). Called from the receiving thread. */
         fun onServiceMessage(json: String) {}
     }
 
@@ -44,12 +44,12 @@ class FlirCamera(
     private var pollThread83: Thread? = null
     private var ep02: UsbEndpoint? = null
 
-    /** JSON-повідомлення з 0x81/0x83 (крім батареї) для тих, хто чекає відповіді на команду. */
+    /** JSON messages from 0x81/0x83 (except battery) for whoever waits for a reply to a command. */
     private val jsonQueue = java.util.concurrent.LinkedBlockingQueue<String>()
     @Volatile private var lastServiceDataAt = 0L
     private val messageCounts = java.util.concurrent.ConcurrentHashMap<Int, Int>()
 
-    /** Якщо задано, усі службові відповіді (0x81/0x83) дописуються сюди записами [ep:1][t_ms:4][len:4][дані]. */
+    /** If set, all service replies (0x81/0x83) are appended here as records [ep:1][t_ms:4][len:4][data]. */
     @Volatile
     private var capture: OutputStream? = null
 
@@ -69,7 +69,7 @@ class FlirCamera(
         if (running) return true
         val conn = manager.openDevice(device)
         if (conn == null) {
-            fail("openDevice() повернув null (немає дозволу?)")
+            fail("openDevice() returned null (no permission?)")
             return false
         }
         connection = conn
@@ -83,9 +83,9 @@ class FlirCamera(
         val ep81 = findEndpoint(interfaces[0], 0x81)
         val ep83 = findEndpoint(interfaces[1], 0x83)
         ep02 = findEndpoint(interfaces[0], 0x02)
-        DiagLog.log("Інтерфейси: ${interfaces.keys.sorted()}, EP85=${ep85 != null}, EP81=${ep81 != null}, EP83=${ep83 != null}, EP02=${ep02 != null}")
+        DiagLog.log("Interfaces: ${interfaces.keys.sorted()}, EP85=${ep85 != null}, EP81=${ep81 != null}, EP83=${ep83 != null}, EP02=${ep02 != null}")
         if (ep85 == null) {
-            fail("Не знайдено ендпоінт 0x85 в інтерфейсі 2")
+            fail("Endpoint 0x85 not found in interface 2")
             closeConnection()
             return false
         }
@@ -97,14 +97,14 @@ class FlirCamera(
             if (ok) claimed.add(itf)
         }
 
-        // Керуючі запити SET_INTERFACE: bmRequestType 0x01, bRequest 0x0B, wValue = alt (0 стоп / 1 старт), wIndex = інтерфейс.
+        // SET_INTERFACE control requests: bmRequestType 0x01, bRequest 0x0B, wValue = alt (0 stop / 1 start), wIndex = interface.
         control(conn, "stop interface 2", 0, 2, 0)
         control(conn, "stop interface 1", 0, 1, 0)
         control(conn, "start interface 1", 1, 1, 0)
         var r = control(conn, "start interface 2 (wLength=2)", 1, 2, 2)
         if (r < 0) r = control(conn, "start interface 2 (wLength=0)", 1, 2, 0)
         if (r < 0) {
-            fail("Не вдалося запустити відеопотік (control transfer)")
+            fail("Could not start the video stream (control transfer)")
             releaseAll(conn)
             return false
         }
@@ -120,7 +120,7 @@ class FlirCamera(
         frameThread = Thread({ frameLoop(conn, ep85, p) }, "flir-frames").also { it.start() }
         if (ep81 != null) pollThread81 = Thread({ pollLoop(conn, ep81, 0x81) }, "flir-poll81").also { it.start() }
         if (ep83 != null) pollThread83 = Thread({ pollLoop(conn, ep83, 0x83) }, "flir-poll83").also { it.start() }
-        listener.onState("Потік запущено")
+        listener.onState("Stream started")
         return true
     }
 
@@ -134,22 +134,22 @@ class FlirCamera(
         frameThread = null
         pollThread81 = null
         pollThread83 = null
-        // Зупиняємо потік так само, як це робить початок послідовності.
+        // Stop the stream the same way the start sequence begins.
         control(conn, "stop interface 2", 0, 2, 0)
         control(conn, "stop interface 1", 0, 1, 0)
         releaseAll(conn)
-        DiagLog.log("Камеру зупинено. Шматків=$chunks, байт=$bytes, таймаутів=$timeouts, кадрів=${parser?.framesParsed}, ресинхронізацій=${parser?.resyncs}")
+        DiagLog.log("Camera stopped. Chunks=$chunks, bytes=$bytes, timeouts=$timeouts, frames=${parser?.framesParsed}, resyncs=${parser?.resyncs}")
     }
 
     /**
-     * ЕКСПЕРИМЕНТ (лише читання): просить камеру відкрити й віддати файл CameraFiles.zip (там, імовірно,
-     * калібрувальні дані) та записує всі сирі відповіді з 0x81/0x83 у файл. Блокує виклик ~5 с — запускати з фонового потоку.
+     * EXPERIMENT (read-only): asks the camera to open and send the file CameraFiles.zip (probably holds the
+     * calibration data) and records all raw replies from 0x81/0x83 into a file. Blocks for up to ~20 s, so run it from a background thread.
      */
     fun runCalibrationProbe(dir: File): String? {
         val conn = connection
         val ep = ep02
         if (!running || conn == null || ep == null) {
-            DiagLog.log("[probe] камера не запущена або немає EP 0x02")
+            DiagLog.log("[probe] the camera is not running or EP 0x02 is missing")
             return null
         }
         dir.mkdirs()
@@ -163,7 +163,7 @@ class FlirCamera(
             DiagLog.log("[probe] -> openFile CameraFiles.zip")
             sendCommand(conn, ep, FlirCommand.OPEN_CAMERA_FILES)
 
-            // Камера відповідає openFileStatus із номером потоку; саме його треба передати в readFile.
+            // The camera replies with openFileStatus carrying a stream number; that number must be passed to readFile.
             var streamId: Int? = null
             val deadline = SystemClock.elapsedRealtime() + 3000
             while (streamId == null && SystemClock.elapsedRealtime() < deadline) {
@@ -172,18 +172,18 @@ class FlirCamera(
                     streamId = Regex("\"streamIdentifier\"\\s*:\\s*(-?\\d+)").find(msg)?.groupValues?.get(1)?.toIntOrNull()
                 }
             }
-            DiagLog.log("[probe] номер потоку з відповіді камери: $streamId")
+            DiagLog.log("[probe] stream number from the camera reply: $streamId")
             val id = when {
                 streamId != null && streamId >= 0 -> streamId.also { lastStreamId = it }
                 else -> {
-                    // Негативне значення — файл уже відкрито раніше в цьому сеансі; пробуємо останній відомий номер.
+                    // A negative value means the file was already opened earlier in this session; try the last known number.
                     val fallback = lastStreamId
-                    DiagLog.log("[probe] камера не видала новий номер потоку, пробую останній відомий: $fallback")
+                    DiagLog.log("[probe] the camera did not give a new stream number, trying the last known one: $fallback")
                     fallback
                 }
             }
             if (id == null) {
-                DiagLog.log("[probe] немає номера потоку — перепідключіть камеру й повторіть")
+                DiagLog.log("[probe] no stream number - reconnect the camera and try again")
                 return null
             }
 
@@ -191,7 +191,7 @@ class FlirCamera(
             DiagLog.log("[probe] -> readFile streamIdentifier=$id")
             sendCommand(conn, ep, FlirCommand.readFile(id))
 
-            // Чекаємо дані: до 15 с, але закінчуємо, коли після останніх даних 2,5 с тиша.
+            // Wait for data: up to 15 s, but stop once 2.5 s of silence follows the last data.
             val end = SystemClock.elapsedRealtime() + 15_000
             while (SystemClock.elapsedRealtime() < end) {
                 Thread.sleep(250)
@@ -202,7 +202,7 @@ class FlirCamera(
             capture = null
             synchronized(out) { runCatching { out.close() } }
         }
-        DiagLog.log("[probe] готово, ${file.length()} байт у ${file.name}; повідомлень за типами: $messageCounts")
+        DiagLog.log("[probe] done, ${file.length()} bytes in ${file.name}; messages by type: $messageCounts")
         return file.name
     }
 
@@ -210,12 +210,21 @@ class FlirCamera(
 
     @Volatile private var captureStart = 0L
 
-    private fun sendCommand(conn: UsbDeviceConnection, ep: UsbEndpoint, json: String) {
+    /** Sends a framed JSON command on the service channel (EP 0x02). Returns true if both transfers were written. */
+    fun sendJson(json: String): Boolean {
+        val conn = connection
+        val ep = ep02
+        if (!running || conn == null || ep == null) return false
+        return sendCommand(conn, ep, json)
+    }
+
+    private fun sendCommand(conn: UsbDeviceConnection, ep: UsbEndpoint, json: String): Boolean {
         val payload = FlirCommand.payload(json)
         val header = FlirCommand.header(payload.size)
         val r1 = conn.bulkTransfer(ep, header, header.size, 1000)
         val r2 = conn.bulkTransfer(ep, payload, payload.size, 1000)
-        DiagLog.log("[probe] команда ${payload.size} байт: заголовок -> $r1, вантаж -> $r2")
+        DiagLog.log("[command] ${payload.size} bytes: header -> $r1, payload -> $r2")
+        return r1 >= 0 && r2 >= 0
     }
 
     private fun record(epAddress: Int, data: ByteArray, n: Int) {
@@ -249,31 +258,31 @@ class FlirCamera(
                 lastData = SystemClock.elapsedRealtime()
                 if (loggedChunks < 12) {
                     loggedChunks++
-                    DiagLog.log("EP85 шматок #$chunks: $n байт, початок: ${UsbDescriptorParser.hex(buf, 0, minOf(n, 16))}")
+                    DiagLog.log("EP85 chunk #$chunks: $n bytes, start: ${UsbDescriptorParser.hex(buf, 0, minOf(n, 16))}")
                 }
                 p.feed(buf, n)
             } else {
                 timeouts++
                 consecutiveErrors++
-                // Справжній таймаут триває ~100 мс; помилка, що повертається миттєво, означає втрату зв'язку.
+                // A real timeout takes ~100 ms; an error that returns immediately means the connection is lost.
                 fastFailures = if (dt < 20) fastFailures + 1 else 0
                 if (fastFailures >= 25) {
-                    DiagLog.log("Зв'язок із камерою втрачено (bulkTransfer=$n миттєво ${fastFailures} разів підряд)")
+                    DiagLog.log("Connection to the camera lost (bulkTransfer=$n immediately ${fastFailures} times in a row)")
                     running = false
                     listener.onLost()
                     break
                 }
                 if (consecutiveErrors == 1 || consecutiveErrors % 50 == 0) {
-                    DiagLog.log("EP85 bulkTransfer=$n (таймаут), підряд=$consecutiveErrors, без даних ${SystemClock.elapsedRealtime() - lastData} мс")
+                    DiagLog.log("EP85 bulkTransfer=$n (timeout), in a row=$consecutiveErrors, without data ${SystemClock.elapsedRealtime() - lastData} ms")
                 }
-                if (consecutiveErrors == 30) listener.onState("Немає даних від камери вже ~3 с")
+                if (consecutiveErrors == 30) listener.onState("No data from the camera for ~3 s")
             }
         }
     }
 
     /**
-     * Камера шле службові повідомлення на 0x81 і 0x83; окремий потік на кожен ендпоінт, щоб дані файлу не губились.
-     * Усе сире йде у capture (під час експерименту), розібрані повідомлення логуються.
+     * The camera sends service messages on 0x81 and 0x83; one thread per endpoint so file data is not lost.
+     * Everything raw goes to capture (during the experiment), parsed messages are logged.
      */
     private fun pollLoop(conn: UsbDeviceConnection, ep: UsbEndpoint, epAddress: Int) {
         val buf = ByteArray(CHUNK)
@@ -292,7 +301,7 @@ class FlirCamera(
             }
             if (!isBattery || batteryLogged++ < 2) {
                 if (logged++ < 60) {
-                    DiagLog.log("EP${epAddress.toString(16)} повідомлення type=$type len=${payload.size} hex=${UsbDescriptorParser.hex(payload, 0, minOf(payload.size, 24))} текст: $text")
+                    DiagLog.log("EP${epAddress.toString(16)} message type=$type len=${payload.size} hex=${UsbDescriptorParser.hex(payload, 0, minOf(payload.size, 24))} text: $text")
                 }
             }
         }
@@ -306,7 +315,7 @@ class FlirCamera(
                 record(epAddress, buf, n)
                 parser.feed(buf, n)
             } else if (SystemClock.elapsedRealtime() - t0 < 20) {
-                // Миттєва помилка (не таймаут): не крутимося вхолосту, поки frameLoop вирішує, що зв'язок втрачено.
+                // Immediate error (not a timeout): do not spin while frameLoop decides the connection is lost.
                 if (++fastFailures > 5) Thread.sleep(20)
             } else {
                 fastFailures = 0
@@ -342,8 +351,8 @@ class FlirCamera(
     }
 
     private fun fail(message: String) {
-        DiagLog.log("ПОМИЛКА: $message")
-        listener.onState("Помилка: $message")
+        DiagLog.log("ERROR: $message")
+        listener.onState("Error: $message")
     }
 
     private var lastEventLog = 0L
@@ -351,7 +360,7 @@ class FlirCamera(
         val now = SystemClock.elapsedRealtime()
         if (now - lastEventLog > 500) {
             lastEventLog = now
-            DiagLog.log("Парсер: $msg")
+            DiagLog.log("Parser: $msg")
         }
     }
 

@@ -1,19 +1,19 @@
 package com.exciteddev.flironepro
 
 /**
- * Калібрування температури користувачем: за еталонними точками (температура відома з термопари чи іншого термометра)
- * знаходить масштаб b (лічильників на одиницю Φ) і зсув (лічильників).
+ * In-app temperature calibration: from reference points (temperatures known from a thermocouple or another thermometer)
+ * finds the scale b (counts per unit of Φ) and the offset (counts).
  *
- * Модель: y = зсув + b*x, де y = S' (сире значення відносно опорної точки), x = Φ_meas(еталон) - Φ(T_затвора).
- *  - 1 точка (або точки в дуже вузькому діапазоні температур): підганяється лише зсув, b лишається заводським;
- *  - 2+ точок із достатнім розкидом температур: лінійна регресія (b, зсув), b обмежується розумними межами.
+ * Model: y = offset + b*x, where y = S' (raw value relative to the anchor), x = Φ_meas(reference) - Φ(T_shutter).
+ *  - 1 point (or points within a very narrow temperature range): only the offset is fitted, b stays at the factory value;
+ *  - 2+ points with a sufficient temperature spread: linear regression (b, offset), b is limited to sane bounds.
  */
 object TempCalibration {
     class Point(val y: Double, val x: Double, val trueC: Double)
 
     class Result(val countsPerPhi: Double, val offsetCounts: Double, val fittedSlope: Boolean)
 
-    /** Мінімальний розкид x (в одиницях Φ, ≈ 2,2 на кельвін біля 300 K) для підгонки масштабу: ≈ 10 K. */
+    /** Minimum spread of x (in units of Φ, ≈ 2.2 per kelvin near 300 K) for fitting the scale: ≈ 10 K. */
     const val MIN_SPAN = 20.0
     const val MIN_B = 10.0
     const val MAX_B = 60.0
@@ -38,7 +38,7 @@ object TempCalibration {
         return Result(defaultB, offset, false)
     }
 
-    /** Серіалізація для SharedPreferences: "y,x,t;y,x,t". */
+    /** Serialization for SharedPreferences: "y,x,t;y,x,t". */
     fun serialize(points: List<Point>): String =
         points.joinToString(";") { "${it.y},${it.x},${it.trueC}" }
 

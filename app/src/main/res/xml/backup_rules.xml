@@ -1,13 +1,16 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Backup rules for Android 11 and older. Only the app settings are backed up; everything that came from the camera or
+    the phone's cameras (saved frames, test snapshots, logs, CSV statistics) stays on the device and is never uploaded.
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="file" path="frames" />
+    <exclude domain="file" path="snapshots" />
+    <exclude domain="file" path="calib" />
+    <exclude domain="file" path="stream_log.txt" />
+    <exclude domain="file" path="stream_log.txt.old" />
+    <exclude domain="file" path="frame_stats.csv" />
+    <exclude domain="file" path="frame_stats_v2.csv" />
+    <exclude domain="file" path="frame_stats_v2.csv.old" />
+    <exclude domain="file" path="usb_report.txt" />
 </full-backup-content>

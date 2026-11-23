@@ -4,18 +4,18 @@ import kotlin.math.exp
 import kotlin.math.ln
 
 /**
- * Переведення сирих значень сенсора в температуру.
+ * Conversion of raw sensor values to temperature.
  *
- * Модель (виведена на реальній камері, див. тести):
- *   Φ(T)    = R / (exp(B/T) - F)                      - функція Планка з констант заводського калібрування (R, B, F)
- *   S'      = S - S_ffc - K_FPA*(T_fpa - T_fpa_ffc)   - сире значення відносно опорної точки з поправкою на дрейф сенсора
- *   Φ_meas  = Φ(T_затвора) + (S' - зсув) / b          - «позірне» випромінювання
- *   Φ_obj   = (Φ_meas - (1-ε)*Φ(T_відбита)) / ε       - поправка на випромінювальну здатність
+ * The model (derived on a real camera, see the tests):
+ *   Φ(T)    = R / (exp(B/T) - F)                      - Planck function with the constants from the factory calibration (R, B, F)
+ *   S'      = S - S_ffc - K_FPA*(T_fpa - T_fpa_ffc)   - raw value relative to the anchor, corrected for sensor drift
+ *   Φ_meas  = Φ(T_shutter) + (S' - offset) / b        - "apparent" radiation
+ *   Φ_obj   = (Φ_meas - (1-ε)*Φ(T_reflected)) / ε     - emissivity correction
  *   T_obj   = B / ln(R/Φ_obj + F)
- * Опорну точку (S_ffc, T_затвора, T_fpa_ffc) дає кожне калібрування затвором (FFC): коли затвор закритий,
- * увесь кадр однаковий, а його температуру камера повідомляє сама.
+ * The anchor (S_ffc, T_shutter, T_fpa_ffc) comes from every shutter calibration (FFC): while the shutter is closed,
+ * the whole frame is uniform and the camera reports its temperature itself.
  *
- * b і зсув за замовчуванням - заводські (підібрані за термопарою), користувач може їх уточнити калібруванням у застосунку.
+ * b and the offset default to the factory values (fitted against a thermocouple); the user can refine them with the in-app calibration.
  */
 class Radiometry {
     class Anchor(val raw: Double, val shutterK: Double, val fpaK: Double)
@@ -24,35 +24,42 @@ class Radiometry {
     var anchor: Anchor? = null
         private set
 
-    /** Випромінювальна здатність об'єкта (1.0 = без поправки). */
+    /** Emissivity of the object (1.0 = no correction). */
     @Volatile var emissivity: Double = 1.0
 
-    /** Температура навколишніх предметів, °C (для поправки на відбиття при ε < 1). */
+    /** Temperature of the surrounding objects, °C (for the reflection correction when ε < 1). */
     @Volatile var reflectedC: Double = 20.0
 
-    /** Скільки сирих лічильників припадає на одиницю Φ. */
+    /** How many raw counts correspond to one unit of Φ. */
     @Volatile var countsPerPhi: Double = DEFAULT_COUNTS_PER_PHI
 
-    /** Додатковий зсув сирих лічильників (результат калібрування в застосунку). */
+    /** Additional raw-count offset (result of the in-app calibration). */
     @Volatile var offsetCounts: Double = 0.0
+
+    /**
+     * The anchor from an earlier session. It is used until this session gets its own calibration, but only while the
+     * sensor temperature is still close to the one at that calibration (the drift correction covers small differences).
+     */
+    @Volatile
+    var fallbackAnchor: Anchor? = null
 
     private var n = 0
     private var sumRaw = 0.0
     private var sumShutter = 0.0
     private var sumFpa = 0.0
 
-    /** Задати опорну точку напряму (демо-режим і тести). */
+    /** Sets the anchor directly (demo mode and tests). */
     fun setAnchor(a: Anchor) {
         anchor = a
     }
 
     /**
-     * Викликати для кожного кадру. Під час FFC збирає «плато» (рівномірний кадр закритого затвора);
-     * коли FFC закінчується, зберігає опорну точку.
+     * Call for every frame. During FFC it collects the "plateau" (the uniform frame of the closed shutter);
+     * when the FFC ends it stores the anchor.
      */
     fun onFrame(ffc: Boolean, stats: ThermalStats, shutterK: Double?, fpaK: Double?) {
         if (ffc) {
-            // Перехідні кадри (затвор рухається) мають великий розкид значень - їх пропускаємо.
+            // Transitional frames (the shutter is moving) have a large spread of values - skip them.
             if (shutterK != null && fpaK != null && stats.max - stats.min < PLATEAU_RANGE) {
                 n++
                 sumRaw += stats.mean
@@ -60,7 +67,11 @@ class Radiometry {
                 sumFpa += fpaK
             }
         } else {
-            if (n >= MIN_PLATEAU_FRAMES) anchor = Anchor(sumRaw / n, sumShutter / n, sumFpa / n)
+            if (n >= MIN_PLATEAU_FRAMES) {
+                val a = Anchor(sumRaw / n, sumShutter / n, sumFpa / n)
+                anchor = a
+                remember(a, System.currentTimeMillis())
+            }
             n = 0
             sumRaw = 0.0
             sumShutter = 0.0
@@ -68,21 +79,26 @@ class Radiometry {
         }
     }
 
-    /** S' (без користувацького зсуву): сире значення відносно опорної точки з поправкою на дрейф сенсора. */
+    /** The anchor in use: this session's own, else the previous session's if the sensor temperature is still close to it. */
+    fun effectiveAnchor(fpaK: Double): Anchor? =
+        anchor ?: fallbackAnchor?.takeIf { Math.abs(fpaK - it.fpaK) <= MAX_FALLBACK_FPA_GAP_K }
+
+    /** S' (without the user offset): the raw value relative to the anchor, corrected for sensor drift. */
     fun relative(raw: Double, fpaK: Double): Double? {
-        val a = anchor ?: return null
+        val a = effectiveAnchor(fpaK) ?: return null
         return raw - a.raw - FPA_DRIFT * (fpaK - a.fpaK)
     }
 
-    /** Φ затвора в опорній точці. */
-    fun shutterPhi(): Double? = anchor?.let { planck(it.shutterK) }
+    /** Φ of the shutter at the anchor in use (the real anchor only, unless the sensor temperature is given). */
+    fun shutterPhi(fpaK: Double? = null): Double? =
+        (if (fpaK != null) effectiveAnchor(fpaK) else anchor)?.let { planck(it.shutterK) }
 
     fun celsius(raw: Int, fpaK: Double): Double? = celsius(raw.toDouble(), fpaK)
 
-    /** Температура в градусах Цельсія для сирого значення, або null, якщо опорної точки ще немає чи значення поза моделлю. */
+    /** Temperature in degrees Celsius for a raw value, or null if there is no anchor yet or the value is outside the model. */
     fun celsius(raw: Double, fpaK: Double): Double? {
         val rel = relative(raw, fpaK) ?: return null
-        val phiMeas = shutterPhi()!! + (rel - offsetCounts) / countsPerPhi
+        val phiMeas = shutterPhi(fpaK)!! + (rel - offsetCounts) / countsPerPhi
         val e = emissivity.coerceIn(MIN_EMISSIVITY, 1.0)
         val phiRefl = planck(reflectedC + 273.15)
         val phiObj = (phiMeas - (1.0 - e) * phiRefl) / e
@@ -92,8 +108,8 @@ class Radiometry {
     }
 
     /**
-     * Точка калібрування: що показував сенсор (y = S') і що було насправді (x = Φ_meas - Φ(T_затвора)),
-     * з урахуванням випромінювальної здатності та відбитої температури на момент вимірювання.
+     * A calibration point: what the sensor showed (y = S') and what was true (x = Φ_meas - Φ(T_shutter)),
+     * taking into account the emissivity and the reflected temperature at the time of the measurement.
      */
     fun calibrationPoint(relative: Double, phiShutter: Double, trueC: Double, emissivity: Double, reflectedC: Double): TempCalibration.Point {
         val e = emissivity.coerceIn(MIN_EMISSIVITY, 1.0)
@@ -102,22 +118,44 @@ class Radiometry {
     }
 
     companion object {
-        /** Константи з calib.rsc (розділ extRBF, фіксована лінза leExFOL2). */
+        /** Constants from calib.rsc (section extRBF, fixed lens leExFOL2). */
         const val R = 14331.136
         const val B = 1384.7
         const val F = 1.0
 
-        /** Заводське значення: лічильників на одиницю Φ (підібрано за термопарою: гаряча вода 74-75 °C, мороз -12 °C, кімната 19 °C). */
+        /** Factory value: counts per unit of Φ (fitted against a thermocouple: hot water 74-75 °C, freezer -12 °C, room 19 °C). */
         const val DEFAULT_COUNTS_PER_PHI = 22.4
         const val COUNTS_PER_PHI = DEFAULT_COUNTS_PER_PHI
 
-        /** Дрейф сирих значень за температурою сенсора, лічильників на кельвін (оцінено з трьох FFC). */
+        /** Drift of the raw values with the sensor temperature, counts per kelvin (estimated from three FFCs). */
         const val FPA_DRIFT = 100.0
 
         const val MIN_EMISSIVITY = 0.05
 
         private const val PLATEAU_RANGE = 150
         private const val MIN_PLATEAU_FRAMES = 3
+
+        /** A previous anchor is reused only if it is not older than this and the sensor temperature differs by at most this much. */
+        const val MAX_FALLBACK_AGE_MS = 20 * 60 * 1000L
+        const val MAX_FALLBACK_FPA_GAP_K = 2.5
+
+        @Volatile private var lastAnchor: Anchor? = null
+        @Volatile private var lastAnchorAtMs = 0L
+
+        /** Remembers the newest anchor of this process, so a restarted pipeline does not have to wait for a new calibration. */
+        fun remember(a: Anchor, nowMs: Long) {
+            lastAnchor = a
+            lastAnchorAtMs = nowMs
+        }
+
+        /** The remembered anchor if it is recent enough, else null. */
+        fun recentAnchor(nowMs: Long): Anchor? = lastAnchor?.takeIf { nowMs - lastAnchorAtMs in 0..MAX_FALLBACK_AGE_MS }
+
+        /** Forgets the remembered anchor (tests). */
+        fun forgetRemembered() {
+            lastAnchor = null
+            lastAnchorAtMs = 0L
+        }
 
         fun planck(tK: Double): Double = R / (exp(B / tK) - F)
     }

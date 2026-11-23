@@ -3,9 +3,9 @@ package com.exciteddev.flironepro
 import java.util.zip.CRC32
 
 /**
- * Розбирає потік службових повідомлень камери (bulk IN 0x81 / 0x83).
- * Кожне повідомлення: 16-байтовий заголовок CC 01 00 00 | type (u32 LE) | довжина (u32 LE) | CRC32 перших 12 байт (u32 LE),
- * далі корисний вантаж потрібної довжини. Не залежить від того, як USB порізав дані на шматки.
+ * Parses the stream of the camera's service messages (bulk IN 0x81 / 0x83).
+ * Each message: 16-byte header CC 01 00 00 | type (u32 LE) | length (u32 LE) | CRC32 of the first 12 bytes (u32 LE),
+ * followed by a payload of the given length. Independent of how USB split the data into chunks.
  */
 class FlirMessageParser(private val onMessage: (type: Int, payload: ByteArray) -> Unit) {
     private var buf = ByteArray(64 * 1024)
@@ -49,12 +49,12 @@ class FlirMessageParser(private val onMessage: (type: Int, payload: ByteArray) -
             val crc = u32(pos + 12).toLong() and 0xFFFFFFFFL
             val calc = CRC32().apply { update(buf, pos, 12) }.value
             if (crc != calc || plen < 0 || plen > MAX_PAYLOAD) {
-                // не заголовок - шукаємо далі
+                // not a header - keep searching
                 bytesSkipped++
                 pos++
                 continue
             }
-            if (len - pos - HEADER < plen) break // вантаж ще не дійшов
+            if (len - pos - HEADER < plen) break // the payload has not arrived yet
 
             val payload = buf.copyOfRange(pos + HEADER, pos + HEADER + plen)
             pos += HEADER + plen

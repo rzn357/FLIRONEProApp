@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-feature
         android:name="android.hardware.usb.host"
@@ -15,16 +16,22 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FLIRONEProApp">
 
+        <!-- The live view is the main screen of the app -->
         <activity
-            android:name=".MainActivity"
+            android:name=".StreamActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density"
             android:exported="true"
-            android:launchMode="singleTop">
+            android:launchMode="singleTop"
+            android:screenOrientation="fullUser"
+            android:theme="@style/Theme.FLIRONEProApp.Stream"
+            android:windowSoftInputMode="adjustPan"
+            tools:ignore="DiscouragedApi">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Пропонує відкрити застосунок, коли підключено пристрій FLIR (VID 0x09CB). -->
+            <!-- Offers to open the app when a FLIR device (VID 0x09CB) is plugged in. -->
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
@@ -33,14 +40,22 @@
                 android:resource="@xml/device_filter" />
         </activity>
 
+        <!-- USB diagnostics, opened from the settings panel -->
         <activity
-            android:name=".StreamActivity"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density"
+            android:name=".DiagnosticsActivity"
             android:exported="false"
-            android:label="@string/live"
-            android:screenOrientation="fullUser"
-            android:theme="@style/Theme.FLIRONEProApp.Stream"
-            android:windowSoftInputMode="adjustPan" />
+            android:label="@string/diag_title"
+            android:parentActivityName=".StreamActivity" />
+
+        <!-- Keeps the per-app language choice across restarts on Android versions before 13 -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
 
     </application>
 

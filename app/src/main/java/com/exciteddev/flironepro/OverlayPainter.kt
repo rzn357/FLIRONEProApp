@@ -9,13 +9,12 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import java.util.Locale
 
-/** Мітка в нормалізованих координатах теплового кадру з температурою (якщо відома). */
+/** A mark in normalized thermal-frame coordinates with a temperature (if known). */
 class Reading(val u: Float, val v: Float, val tempC: Double?)
 
-/** Усе, що малюється поверх картинки і змінюється від кадру до кадру. */
+/** Everything drawn over the picture that changes from frame to frame. */
 class OverlayState(
     val mode: DisplayMode,
-    val paletteLabel: String,
     val lut: IntArray,
     val cross: Reading?,
     val hot: Reading?,
@@ -25,22 +24,31 @@ class OverlayState(
     val waitingForAnchor: Boolean,
     val ffcActive: Boolean,
     val emissivity: Double,
-    val fps: Float,
 )
 
-/** Додаткові написи тільки для екрана (на знімки й відео не потрапляють). */
+/** Localized texts used by the overlay painter. */
+class UiTexts(
+    val locale: Locale,
+    val waitingForCalibration: String,
+    val shutterCalibration: String,
+    val demoNote: String,
+    /** Format with one string argument, e.g. "ε %1$s". */
+    val emissivityFormat: String,
+)
+
+/** Extra on-screen notes (not included in photos and videos). */
 class Hud(
-    val battery: BatteryState,
-    val recordingMs: Long?,
     val message: String?,
     val demo: Boolean,
+    /** Notes are hidden while a panel or card is open over the picture. */
+    val showNotes: Boolean = true,
 )
 
 /**
- * Малює накладення поверх зображення. Для екрана й для знімків/відео використовується той самий код,
- * тому мітки збігаються з картинкою в будь-якому повороті.
+ * Draws the overlays over the picture. The screen and photos/videos use the same code, so the marks
+ * match the picture at any rotation.
  */
-class OverlayPainter(private val density: Float) {
+class OverlayPainter(private val density: Float, private val texts: UiTexts) {
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -60,7 +68,7 @@ class OverlayPainter(private val density: Float) {
 
     private fun dp(v: Float) = v * density
 
-    /** Нормалізовані координати теплового кадру -> координати вмісту (у режимі видимої камери - через вирівнювання). */
+    /** Thermal-frame normalized coordinates -> content coordinates (in visible-camera mode through the alignment). */
     fun thermalToContent(mode: DisplayMode, a: Alignment, u: Float, v: Float): Pair<Float, Float> =
         if (mode == DisplayMode.VISIBLE) Pair(a.thermalToVisibleU(u), a.thermalToVisibleV(v)) else Pair(u, v)
 
@@ -86,18 +94,18 @@ class OverlayPainter(private val density: Float) {
         if (showMarkers) {
             o.hot?.let { h ->
                 val (x, y) = px(h.u, h.v)
-                drawMarker(canvas, t, x, y, 0xFFFF3B30.toInt(), up = true, label = h.tempC?.let { fmt(it) })
+                if (t.isOnScreen(x, y)) drawMarker(canvas, t, x, y, 0xFFFF3B30.toInt(), up = true, label = h.tempC?.let { fmt(it) })
             }
             o.cold?.let { c ->
                 val (x, y) = px(c.u, c.v)
-                drawMarker(canvas, t, x, y, 0xFF2F9BFF.toInt(), up = false, label = c.tempC?.let { fmt(it) })
+                if (t.isOnScreen(x, y)) drawMarker(canvas, t, x, y, 0xFF2F9BFF.toInt(), up = false, label = c.tempC?.let { fmt(it) })
             }
         }
 
         val (cx, cy) = px(crossU, crossV)
         drawCrosshair(canvas, t, cx, cy, o.cross?.tempC?.let { fmt(it) })
 
-        if (hud != null) drawHud(canvas, t, o, hud)
+        if (hud != null && hud.showNotes) drawNotes(canvas, t, o, hud)
     }
 
     private fun drawCrosshair(canvas: Canvas, t: ViewTransform, x: Float, y: Float, label: String?) {
@@ -141,7 +149,7 @@ class OverlayPainter(private val density: Float) {
         }
     }
 
-    /** Підпис із темною підкладкою; не виходить за межі кадру. */
+    /** A label on a dark backing; it never leaves the frame. */
     private fun drawLabel(canvas: Canvas, t: ViewTransform, s: String, left: Float, top: Float, color: Int) {
         text.textSize = dp(13f)
         text.color = color
@@ -159,10 +167,10 @@ class OverlayPainter(private val density: Float) {
         val bm = scaleBitmapFor(o.lut)
         val barW = dp(14f)
         val margin = dp(10f)
-        val h = t.destH * 0.6f
-        val right = t.destLeft + t.destW - margin
+        val h = (t.visBottom - t.visTop) * 0.6f
+        val right = t.visRight - margin
         val left = right - barW
-        val top = t.destTop + (t.destH - h) / 2f
+        val top = t.visTop + ((t.visBottom - t.visTop) - h) / 2f
         rect.set(left, top, right, top + h)
         canvas.drawBitmap(bm, null, rect, bitmapPaint)
         stroke.color = Color.WHITE
@@ -178,50 +186,27 @@ class OverlayPainter(private val density: Float) {
     private fun scaleBitmapFor(lut: IntArray): Bitmap {
         val cached = scaleBitmap
         if (cached != null && scaleLut === lut) return cached
-        val px = IntArray(256) { lut[255 - it] } // згори гаряче
+        val px = IntArray(256) { lut[255 - it] } // hot at the top
         val bm = Bitmap.createBitmap(px, 1, 256, Bitmap.Config.ARGB_8888)
         scaleBitmap = bm
         scaleLut = lut
         return bm
     }
 
-    private fun drawHud(canvas: Canvas, t: ViewTransform, o: OverlayState, hud: Hud) {
-        val m = dp(8f)
-        text.textSize = dp(13f)
-
-        val bat = hud.battery.label()
-        if (bat.isNotEmpty()) drawLabel(canvas, t, bat, m, m, if ((hud.battery.percentage ?: 100) <= 15) 0xFFFF5252.toInt() else Color.WHITE)
-
-        val info = buildString {
-            append(o.mode.label)
-            if (o.mode != DisplayMode.VISIBLE) append(" · ").append(o.paletteLabel)
-            append(" · ").append(String.format(Locale.US, "%.1f", o.fps)).append(" к/с")
-        }
-        drawLabel(canvas, t, info, t.viewW - text.measureText(info) - m - dp(12f), m, Color.WHITE)
-
-        hud.recordingMs?.let { ms ->
-            val sec = ms / 1000
-            val s = String.format(Locale.US, "● REC %d:%02d", sec / 60, sec % 60)
-            drawLabel(canvas, t, s, (t.viewW - text.measureText(s)) / 2f - dp(4f), m + dp(30f), 0xFFFF5252.toInt())
-        }
-
+    /** Status notes centered below the top bar: demo, waiting for the shutter calibration, emissivity. */
+    private fun drawNotes(canvas: Canvas, t: ViewTransform, o: OverlayState, hud: Hud) {
+        text.textSize = dp(12f)
         val notes = ArrayList<String>()
-        if (hud.demo) notes.add("ДЕМО: збережені кадри, температури не точні")
-        if (o.waitingForAnchor) notes.add("чекаю калібрування затвором (FFC)…")
-        else if (o.ffcActive) notes.add("калібрування затвором…")
-        if (o.emissivity < 0.999) notes.add(String.format(Locale.US, "ε %.2f", o.emissivity))
-        val rowH = text.textSize + dp(12f)
-        var y = t.viewH - m - rowH
-        for (n in notes.asReversed()) {
-            drawLabel(canvas, t, n, m, y, 0xFFFFD60A.toInt())
-            y -= rowH
-        }
-
-        hud.message?.let { msg ->
-            val w = text.measureText(msg)
-            drawLabel(canvas, t, msg, (t.viewW - w) / 2f - dp(4f), t.viewH * 0.4f, Color.WHITE)
+        if (hud.demo) notes.add(texts.demoNote)
+        if (o.waitingForAnchor) notes.add(texts.waitingForCalibration)
+        else if (o.ffcActive) notes.add(texts.shutterCalibration)
+        if (o.emissivity < 0.999) notes.add(String.format(texts.locale, texts.emissivityFormat, String.format(texts.locale, "%.2f", o.emissivity)))
+        var y = dp(64f)
+        for (n in notes) {
+            drawLabel(canvas, t, n, (t.viewW - text.measureText(n)) / 2f - dp(4f), y, 0xFFFFD60A.toInt())
+            y += text.textSize + dp(14f)
         }
     }
 
-    private fun fmt(c: Double) = String.format(Locale.US, "%.1f°C", c)
+    private fun fmt(c: Double) = String.format(texts.locale, "%.1f°C", c)
 }

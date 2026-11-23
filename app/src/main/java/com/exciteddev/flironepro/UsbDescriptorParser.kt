@@ -1,8 +1,8 @@
 package com.exciteddev.flironepro
 
 /**
- * Розбирає «сирі» USB-дескриптори (device + усі configuration) у читабельний текст.
- * Нічого не знає про Android, тому тестується звичайним unit-тестом.
+ * Parses raw USB descriptors (device + all configurations) into readable text.
+ * Knows nothing about Android, so it can be tested with an ordinary unit test.
  */
 object UsbDescriptorParser {
 
@@ -12,7 +12,7 @@ object UsbDescriptorParser {
         while (i + 2 <= raw.size) {
             val len = raw.u8(i)
             if (len < 2 || i + len > raw.size) {
-                out.appendLine("!! пошкоджений дескриптор на зсуві $i (bLength=$len), решта: ${hex(raw, i, raw.size - i)}")
+                out.appendLine("!! corrupted descriptor at offset $i (bLength=$len), the rest: ${hex(raw, i, raw.size - i)}")
                 break
             }
             out.appendLine(describe(raw, i, len))
@@ -49,7 +49,7 @@ object UsbDescriptorParser {
                 "  IAD: firstInterface=${raw.u8(off + 2)} count=${raw.u8(off + 3)} " +
                     "class=${className(raw.u8(off + 4))} sub=${raw.u8(off + 5)} proto=${raw.u8(off + 6)}"
 
-            else -> "    ? тип 0x${type.toString(16).padStart(2, '0')} (len=$len): ${hex(raw, off, len)}"
+            else -> "    ? type 0x${type.toString(16).padStart(2, '0')} (len=$len): ${hex(raw, off, len)}"
         }
     }
 

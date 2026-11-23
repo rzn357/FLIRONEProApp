@@ -3,12 +3,12 @@ package com.exciteddev.flironepro
 import java.util.zip.CRC32
 
 /**
- * Кадрування службових JSON-команд камери (канал bulk OUT 0x02).
+ * Framing of the camera's service JSON commands (bulk OUT channel 0x02).
  *
- * Команда надсилається двома bulk-передачами:
- *   1) 16-байтовий заголовок: CC 01 00 00 | 01 00 00 00 | довжина корисного вантажу (u32 LE) | CRC32 перших 12 байт (u32 LE)
- *   2) корисний вантаж: JSON у UTF-8 із завершальним нульовим байтом (довжина включає цей байт)
- * Формат виведено зі зразків команд, перехоплених спільнотою, і перевірено збігом CRC32.
+ * A command is sent as two bulk transfers:
+ *   1) 16-byte header: CC 01 00 00 | 01 00 00 00 | payload length (u32 LE) | CRC32 of the first 12 bytes (u32 LE)
+ *   2) payload: JSON in UTF-8 with a terminating zero byte (the length includes this byte)
+ * The format was derived from command samples captured by the community and verified by matching the CRC32.
  */
 object FlirCommand {
     const val OPEN_CAMERA_FILES = """{"type":"openFile","data":{"mode":"r","path":"CameraFiles.zip"}}"""
