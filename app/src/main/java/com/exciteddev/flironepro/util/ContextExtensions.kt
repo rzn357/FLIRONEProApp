@@ -1,7 +1,6 @@
 package com.exciteddev.flironepro.util
 
 import android.content.Context
-import android.content.pm.ApplicationInfo
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
@@ -21,10 +20,6 @@ internal fun Context.currentLanguageTag(): String = if (appLocale().language == 
 internal fun setAppLanguage(tag: String) {
     AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
 }
-
-/** True in debuggable builds: only they offer the demo player, the self-test and the raw-command sender. */
-internal val Context.isDebuggable: Boolean
-    get() = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
 /** A number with one decimal place, in the app's language. */
 internal fun Context.format1(x: Double): String = String.format(appLocale(), "%.1f", x)

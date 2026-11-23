@@ -114,8 +114,8 @@ The code is in `app/src/main/java/com/exciteddev/flironepro/`, split by layer (t
 | `media` | Saving photos and recording video. |
 | `settings` | `AppSettings`, the user's choices that persist between launches. |
 | `util` | Small `Context` helpers: dp to pixels, the app language, toasts. |
-| `debug` | The diagnostic log, the frame statistics and the demo replay. |
-| `ui` | Everything on the screen: activities, the controllers, `StreamViewModel` and `StreamScreen`, `ThermalView` (the `PictureSink`), the settings panel, the cards, and the developer tools that drive the screen (the adb run plan and the self-test). |
+| `debug` | The diagnostic log, the frame statistics and the demo replay. Only in debug builds (`src/debug`); release has the same API that does nothing (`src/release`). |
+| `ui` | Everything on the screen: activities, the controllers, `StreamViewModel` and `StreamScreen`, `ThermalView` (the `PictureSink`), the settings panel, the cards. The developer tools that drive the screen (the adb run plan, the self-test) are in `src/debug`. |
 
 ### How it works, in short
 
@@ -157,8 +157,11 @@ the temperature model against measured reference values, the calibration fit, im
 shutter-calibration logic against a simulated camera, and a check that the English and Ukrainian string files match.
 The USB and UI code that needs real hardware is verified on a device.
 
-For development without the camera, debuggable builds contain a replay of recorded frames and a self-test that renders the
-whole UI into PNG files; both are started from `adb` and are not reachable in the app itself.
+For development without the camera, debug builds contain a replay of recorded frames and a self-test that renders the
+whole UI into PNG files; both are started from `adb` and are not reachable in the app itself. This code is in the `debug`
+source set (`app/src/debug`), so it is not even compiled into a release build; `app/src/release` holds the empty counterparts
+(`DiagLog` and `FrameStatsLog` that do nothing, and a `DevTools` without tools). The common code reaches the tools only through
+the `DevTools` and `ReplaySource` interfaces in `main`.
 
 ## Limitations
 

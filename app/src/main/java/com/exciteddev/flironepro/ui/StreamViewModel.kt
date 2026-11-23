@@ -39,13 +39,6 @@ class StreamViewModel(application: Application) : AndroidViewModel(application) 
         session.register()
     }
 
-    /** Sets how this launch of the screen runs; a demo of an earlier launch does not go on into a normal one. */
-    fun applyRunPlan(demo: Boolean, selfTest: Boolean) {
-        if (runMode.demo && !demo) session.stop()
-        runMode.demo = demo
-        runMode.selfTest = selfTest
-    }
-
     /** The screen is gone for good (not recreated): nothing may go on streaming. */
     override fun onCleared() {
         session.unregister()

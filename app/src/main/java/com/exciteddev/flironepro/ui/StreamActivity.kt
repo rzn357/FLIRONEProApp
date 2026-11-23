@@ -26,27 +26,20 @@ class StreamActivity : AppCompatActivity() {
 
     private lateinit var model: StreamViewModel
     private lateinit var screen: StreamScreen
-    private lateinit var debugCommands: DebugCommands
+    private lateinit var devTools: DevTools
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         DiagLog.init(this)
         setContentView(R.layout.activity_stream)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        val plan = DebugRun.plan(this, savedInstanceState, intent)
         model = ViewModelProvider(this)[StreamViewModel::class.java]
-        model.applyRunPlan(plan.demo, plan.selfTest)
+        // Debug builds only: the developer tools (started from adb) can turn this run into a demo or a self-test.
+        devTools = createDevTools(this, model)
+        devTools.planRun(savedInstanceState, intent)
         screen = StreamScreen(this, model)
-        debugCommands = DebugCommands(this, model.pipeline)
         screen.bind()
-
-        // Diagnostic self-test (started from adb in debug builds): runs in demo mode, independent of window visibility.
-        if (plan.runSelfTest) {
-            model.runMode.demo = true
-            model.session.startDemo()
-            SelfTest(screen, plan.language).start()
-        }
-        debugCommands.handle(intent)
+        devTools.screenReady(screen, intent)
     }
 
     override fun onStart() {
@@ -55,7 +48,7 @@ class StreamActivity : AppCompatActivity() {
         val runMode = model.runMode
         when {
             runMode.selfTest -> Unit
-            runMode.demo -> model.session.startDemo()
+            runMode.demo -> devTools.startDemo()
             else -> model.session.ensureStarted()
         }
     }
@@ -65,7 +58,7 @@ class StreamActivity : AppCompatActivity() {
         setIntent(intent)
         val runMode = model.runMode
         if (!runMode.selfTest && !runMode.demo && model.pipeline.camera?.isRunning != true) model.session.ensureStarted()
-        debugCommands.handle(intent)
+        devTools.newIntent(intent)
     }
 
     override fun onStop() {

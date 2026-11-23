@@ -3,7 +3,6 @@ package com.exciteddev.flironepro.pipeline
 import android.content.Context
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
-import com.exciteddev.flironepro.debug.DemoSource
 import com.exciteddev.flironepro.debug.DiagLog
 import com.exciteddev.flironepro.debug.FrameStatsLog
 import com.exciteddev.flironepro.protocol.BatteryState
@@ -48,7 +47,7 @@ class StreamPipeline(private val context: Context, private val settings: AppSett
     @Volatile var camera: FlirCamera? = null
         private set
 
-    @Volatile var demoSource: DemoSource? = null
+    @Volatile var replay: ReplaySource? = null
         private set
 
     @Volatile var battery = BatteryState()
@@ -97,21 +96,24 @@ class StreamPipeline(private val context: Context, private val settings: AppSett
         return started
     }
 
-    /** Starts replaying the saved frames, [frameMs] apart; null if the demo is already running. */
-    fun startDemo(frameMs: Long): DemoSource? {
-        if (demoSource != null) return null
-        beginSession(live = false, fixedFpaK = DEMO_FPA_K)
-        radiometry.setAnchor(DEMO_ANCHOR)
-        DiagLog.log("=== Starting the demo ===")
-        val src = DemoSource(FrameStore.dir(context), frameMs) { onFrame(it) }
-        demoSource = src
+    /**
+     * Starts a session fed by a [ReplaySource] instead of the camera; null if one is already running. The replayed frames do
+     * not feed the temperature model, which gets the [anchor] and the sensor temperature [fixedFpaK] instead. [create] gets
+     * the function the source has to deliver its frames to.
+     */
+    fun <T : ReplaySource> startReplay(fixedFpaK: Double, anchor: Radiometry.Anchor, create: (onFrame: (FlirFrame) -> Unit) -> T): T? {
+        if (replay != null) return null
+        beginSession(live = false, fixedFpaK = fixedFpaK)
+        radiometry.setAnchor(anchor)
+        val src = create { onFrame(it) }
+        replay = src
         src.start()
         return src
     }
 
     fun stop() {
-        demoSource?.shutdown()
-        demoSource = null
+        replay?.shutdown()
+        replay = null
         camera?.stop()
         camera = null
         processor?.shutdown()
@@ -165,9 +167,6 @@ class StreamPipeline(private val context: Context, private val settings: AppSett
     }
 
     private companion object {
-        /** The demo's anchor and sensor temperature, taken from verified measurements (room / freezer). */
-        val DEMO_ANCHOR = Radiometry.Anchor(3845.0, 304.92, 305.21)
-        const val DEMO_FPA_K = 305.4
         const val SERVICE_LOG_CHARS = 300
     }
 }

@@ -7,7 +7,7 @@ plugins {
 detekt {
     buildUponDefaultConfig = true
     config.setFrom(rootProject.file("config/detekt/detekt.yml"))
-    source.setFrom("src/main/java", "src/test/java")
+    source.setFrom("src/main/java", "src/debug/java", "src/release/java", "src/test/java")
     parallel = true
 }
 

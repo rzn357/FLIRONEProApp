@@ -12,7 +12,6 @@ import android.os.Looper
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import com.exciteddev.flironepro.R
-import com.exciteddev.flironepro.debug.DemoSource
 import com.exciteddev.flironepro.debug.DiagLog
 import com.exciteddev.flironepro.pipeline.StreamPipeline
 import com.exciteddev.flironepro.pipeline.stopRecording
@@ -108,15 +107,6 @@ class StreamSession(
         if (pipeline.startCamera(usbManager, device)) status.say(R.string.msg_wait_first_frame)
     }
 
-    fun startDemo() {
-        // The self-test feeds frames faster (20/s) to check the performance headroom.
-        val src = pipeline.startDemo(if (runMode.selfTest) SELF_TEST_FRAME_MS else DemoSource.FRAME_MS) ?: return
-        status.say(R.string.msg_demo_running)
-        ui.postDelayed({
-            if (pipeline.demoSource === src && src.frameCount == 0 && pipeline.frameCount == 0) status.say(R.string.msg_demo_no_frames)
-        }, NO_DEMO_FRAMES_AFTER_MS)
-    }
-
     fun stop() {
         pipeline.stopRecording()
         pipeline.stop()
@@ -124,7 +114,5 @@ class StreamSession(
 
     private companion object {
         const val ACTION_PERMISSION = "com.exciteddev.flironepro.USB_PERMISSION_STREAM"
-        const val SELF_TEST_FRAME_MS = 50L
-        const val NO_DEMO_FRAMES_AFTER_MS = 1500L
     }
 }

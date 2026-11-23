@@ -9,15 +9,14 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.lifecycle.lifecycleScope
 import com.exciteddev.flironepro.debug.DiagLog
 import com.exciteddev.flironepro.pipeline.StreamPipeline
-import com.exciteddev.flironepro.util.isDebuggable
 import com.exciteddev.flironepro.util.setAppLanguage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * How this launch of the screen is to run. The demo player and the self-test are developer tools of debuggable builds only;
- * they are started from adb.
+ * How this launch of the screen is to run. The demo player and the self-test are developer tools of debug builds only (this
+ * file is in `src/debug`); they are started from adb.
  */
 class RunPlan(val demo: Boolean, val selfTest: Boolean, val runSelfTest: Boolean, val language: String?)
 
@@ -32,9 +31,8 @@ object DebugRun {
     private const val PREF_PREVIOUS_LANGUAGE = "prevLang"
 
     fun plan(activity: AppCompatActivity, savedInstanceState: Bundle?, intent: Intent): RunPlan {
-        val debuggable = activity.isDebuggable
-        val demo = debuggable && intent.getBooleanExtra(EXTRA_DEMO, false)
-        val selfTest = debuggable && intent.getBooleanExtra(EXTRA_SELFTEST, false)
+        val demo = intent.getBooleanExtra(EXTRA_DEMO, false)
+        val selfTest = intent.getBooleanExtra(EXTRA_SELFTEST, false)
         val language = intent.getStringExtra(EXTRA_SELFTEST_LANG)
         return if (selfTest) planSelfTest(activity, savedInstanceState, demo, language) else RunPlan(demo, false, false, language)
     }
@@ -67,13 +65,13 @@ object DebugRun {
 }
 
 /**
- * Developer tool (debuggable builds only): sends raw JSON commands to the camera once frames are flowing, so that the
+ * Developer tool (debug builds only): sends raw JSON commands to the camera once frames are flowing, so that the
  * camera's reactions can be studied from adb. Commands are separated by "@@"; the gap between them is in milliseconds.
  */
 class DebugCommands(private val activity: AppCompatActivity, private val pipeline: StreamPipeline) {
     fun handle(intent: Intent) {
         val raw = intent.getStringExtra(EXTRA_SEND_JSON)
-        if (activity.isDebuggable && raw != null) {
+        if (raw != null) {
             intent.removeExtra(EXTRA_SEND_JSON)
             val gap = intent.getIntExtra(EXTRA_SEND_GAP, DEFAULT_GAP_MS).toLong()
             val commands = raw.split("@@").map { it.trim() }.filter { it.isNotEmpty() }

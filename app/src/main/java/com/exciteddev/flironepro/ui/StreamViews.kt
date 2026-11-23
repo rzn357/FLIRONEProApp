@@ -28,5 +28,5 @@ class StreamViews(activity: Activity) {
     val settingsHost: FrameLayout = activity.findViewById(R.id.settingsHost)
 }
 
-/** How this run uses the screen: normally, or with the demo player / the self-test (debuggable builds only). */
+/** How this run uses the screen: normally, or with the demo player / the self-test (set by the [DevTools] of debug builds only). */
 class RunMode(@Volatile var demo: Boolean = false, @Volatile var selfTest: Boolean = false)
