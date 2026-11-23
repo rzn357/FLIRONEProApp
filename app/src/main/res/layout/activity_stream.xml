@@ -5,7 +5,7 @@
     android:layout_height="match_parent">
 
     <!-- The image fills the whole screen; everything else is drawn over it -->
-    <com.exciteddev.flironepro.ThermalView
+    <com.exciteddev.flironepro.ui.ThermalView
         android:id="@+id/thermalView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />

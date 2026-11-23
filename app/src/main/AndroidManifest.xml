@@ -18,7 +18,7 @@
 
         <!-- The live view is the main screen of the app -->
         <activity
-            android:name=".StreamActivity"
+            android:name=".ui.StreamActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density"
             android:exported="true"
             android:launchMode="singleTop"
@@ -42,10 +42,10 @@
 
         <!-- USB diagnostics, opened from the settings panel -->
         <activity
-            android:name=".DiagnosticsActivity"
+            android:name=".ui.DiagnosticsActivity"
             android:exported="false"
             android:label="@string/diag_title"
-            android:parentActivityName=".StreamActivity" />
+            android:parentActivityName=".ui.StreamActivity" />
 
         <!-- Keeps the per-app language choice across restarts on Android versions before 13 -->
         <service

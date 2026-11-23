@@ -94,6 +94,23 @@ flowchart LR
 | `FrameProcessor`, `ImageComposer`, `PictureRenderer` | The render thread (only the newest frame is kept): colorizing, smooth enlargement, MSX, overlays. The same code draws the screen, photos and video, so marks always match the picture. |
 | `StreamActivity` and the controllers | The screen: `StreamSession` (start/stop, USB permission), `ChromeController`, `HudController`, `RecordingController`, `SettingsPanel`, `ToolCards`. |
 
+### Packages
+
+The code is in `app/src/main/java/com/exciteddev/flironepro/`, split by layer (the unit tests follow the same layout). Dependencies go one way, from `ui` down to `protocol`, with no cycles between packages:
+
+| Package | Contents |
+|---|---|
+| `usb` | The camera over USB: `FlirCamera`, `FlirUsb`, `FlirReaders`, `ServiceChannel`, descriptor parsing and the USB report. |
+| `protocol` | The wire format with no USB or Android dependency: frame and message parsers, commands, telemetry packets. |
+| `radiometry` | The temperature model: `Radiometry`, `TempCalibration`, `ShutterCalibration`, `FfcTracker`, `ThermalImage`. |
+| `pipeline` | Frames from the camera to the picture: `StreamPipeline`, `FrameIntake`, `FrameStore`, `FrameProcessor`, `PictureRenderer`. It hands the finished picture to a `PictureSink` and knows nothing about the screen. |
+| `render` | Drawing: `ImageComposer`, `OverlayPainter`, `Palettes`, `ViewTransform`, the overlay texts. |
+| `media` | Saving photos and recording video. |
+| `settings` | `AppSettings`, the user's choices that persist between launches. |
+| `util` | Small `Context` helpers: dp to pixels, the app language, toasts. |
+| `debug` | The diagnostic log, the frame statistics and the demo replay. |
+| `ui` | Everything on the screen: activities, the controllers, `ThermalView` (the `PictureSink`), the settings panel, the cards, and the developer tools that drive the screen (the adb run plan and the self-test). |
+
 ### How it works, in short
 
 - **Transport.** The camera shows up as three vendor-specific interfaces. After a `SET_INTERFACE` start sequence, video
