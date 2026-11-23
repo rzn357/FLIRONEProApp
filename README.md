@@ -1,5 +1,7 @@
 # FLIR ONE Pro for Android: an independent thermal-camera viewer
 
+[![CI](https://github.com/rzn357/FLIRONEProApp/actions/workflows/ci.yml/badge.svg)](https://github.com/rzn357/FLIRONEProApp/actions/workflows/ci.yml)
+
 An Android app (Kotlin) that shows the live picture of a **FLIR ONE Pro** thermal camera (USB-C) and measures temperatures
 with it. The camera is driven by **its own USB driver** written from scratch on top of Android's USB host API: no vendor
 SDK, no native libraries.
@@ -245,6 +247,19 @@ Because the staged state is checked, every commit must be clean on its own, not 
 
 The check takes from several seconds to about a minute. It cannot be relied on alone: `git commit --no-verify` skips it, and the setting above
 is local to each clone.
+
+### Continuous integration
+
+The hook can be skipped (`--no-verify`) and is local to each clone, so the same checks also run on GitHub, in the
+workflow `.github/workflows/ci.yml`. It runs on every push to `main` and on every pull request, and executes
+
+```
+./gradlew spotlessCheck detekt lintDebug testDebugUnitTest assembleDebug --continue
+```
+
+that is, both linters, Android lint, the unit tests and a debug build. `--continue` makes one run report every failing
+check instead of stopping at the first. The badge at the top of this file shows the state of the last run on `main`.
+The lint and test reports and the debug APK are attached to each run as artifacts (kept for 14 days).
 
 ### Gradle and a user name with non-Latin letters (Windows)
 

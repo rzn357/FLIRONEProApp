@@ -1,0 +1,56 @@
+name: CI
+
+# The same checks as the local pre-commit hook (ktlint through Spotless, detekt), plus Android lint, the unit tests and
+# a debug build. See "Continuous integration" in README.md.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch or pull request makes the older run pointless.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # Installs the Android SDK command-line tools and accepts the licenses, so Gradle can download the platform.
+      - uses: android-actions/setup-android@v4
+
+      # Also checks the checksum of gradle-wrapper.jar and caches Gradle's files between runs.
+      - uses: gradle/actions/setup-gradle@v6
+
+      # --continue: every failing check is reported in one run, not only the first one.
+      - name: Check, test and build
+        run: ./gradlew spotlessCheck detekt lintDebug testDebugUnitTest assembleDebug --continue --console=plain
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
