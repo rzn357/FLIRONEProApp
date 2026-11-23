@@ -16,7 +16,8 @@ class FlirFrameTest {
     private fun buildFrame(thermal: ByteArray, jpg: ByteArray, status: ByteArray): ByteArray {
         val frameSize = thermal.size + jpg.size + status.size
         val header = ByteArray(28)
-        header[0] = 0xEF.toByte(); header[1] = 0xBE.toByte()
+        header[0] = 0xEF.toByte()
+        header[1] = 0xBE.toByte()
         u32(frameSize).copyInto(header, 8)
         u32(thermal.size).copyInto(header, 12)
         u32(jpg.size).copyInto(header, 16)
@@ -27,10 +28,13 @@ class FlirFrameTest {
     /** Thermal data of layout A: a row is 164 pixels, 4 service bytes at the start and 4 more in the middle. Pixel (x,y) = y*160+x. */
     private fun layoutAThermal(): ByteArray {
         val t = ByteArray(4 + 120 * 164 * 2)
-        for (y in 0 until 120) for (x in 0 until 160) {
-            val v = y * 160 + x
-            val o = 4 + 2 * (y * 164 + x) + (if (x < 80) 0 else 4)
-            t[o] = v.toByte(); t[o + 1] = (v shr 8).toByte()
+        for (y in 0 until 120) {
+            for (x in 0 until 160) {
+                val v = y * 160 + x
+                val o = 4 + 2 * (y * 164 + x) + (if (x < 80) 0 else 4)
+                t[o] = v.toByte()
+                t[o + 1] = (v shr 8).toByte()
+            }
         }
         return t
     }
@@ -78,7 +82,8 @@ class FlirFrameTest {
 
     @Test
     fun bogusHeaderIsSkipped() {
-        val bogus = byteArrayOf(0xEF.toByte(), 0xBE.toByte(), 0, 0, 0, 0, 0, 0, 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0x7F) + ByteArray(40)
+        val bogus =
+            byteArrayOf(0xEF.toByte(), 0xBE.toByte(), 0, 0, 0, 0, 0, 0, 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0x7F) + ByteArray(40)
         val f = buildFrame(layoutAThermal(), ByteArray(10), status(false))
         val (frames, _) = collect(64, bogus + f)
         assertEquals(1, frames.size)
@@ -97,7 +102,10 @@ class FlirFrameTest {
     @Test
     fun decodesLayoutB() {
         val t = ByteArray(160 * 120 * 2)
-        for (i in 0 until 160 * 120) { t[2 * i] = i.toByte(); t[2 * i + 1] = (i shr 8).toByte() }
+        for (i in 0 until 160 * 120) {
+            t[2 * i] = i.toByte()
+            t[2 * i + 1] = (i shr 8).toByte()
+        }
         val (frames, _) = collect(1000, buildFrame(t, ByteArray(10), status(false)))
         val raw = ThermalImage.decode(frames[0])!!
         assertEquals(160 * 120 - 1, raw[160 * 120 - 1])
@@ -145,9 +153,12 @@ class FlirFrameTest {
         val t = ByteArray(243 * 164)
         fun put(packet: Int, word: Int, v: Int) {
             val o = packet * 164 + 4 + 2 * word
-            t[o] = v.toByte(); t[o + 1] = (v shr 8).toByte()
+            t[o] = v.toByte()
+            t[o + 1] = (v shr 8).toByte()
         }
-        put(240, 0, 14); put(241, 3, 3138); put(242, 79, 0x1234)
+        put(240, 0, 14)
+        put(241, 3, 3138)
+        put(242, 79, 0x1234)
         val (frames, _) = collect(4096, buildFrame(t, ByteArray(10), status(false)))
         val tele = ThermalImage.telemetry(frames[0])!!
         assertEquals(240, tele.size)
@@ -167,7 +178,10 @@ class FlirFrameTest {
     @Test
     fun statsComputeMeanAndCenter() {
         val raw = IntArray(160 * 120) { 100 }
-        raw[59 * 160 + 79] = 200; raw[59 * 160 + 80] = 200; raw[60 * 160 + 79] = 200; raw[60 * 160 + 80] = 200
+        raw[59 * 160 + 79] = 200
+        raw[59 * 160 + 80] = 200
+        raw[60 * 160 + 79] = 200
+        raw[60 * 160 + 80] = 200
         val s = ThermalImage.stats(raw)
         assertEquals(200, s.center)
         assertEquals(100, s.min)

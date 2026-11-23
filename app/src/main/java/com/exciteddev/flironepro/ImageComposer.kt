@@ -27,7 +27,10 @@ object ImageComposer {
             val s = (ox + 0.5f) * SRC_W / OUT_W - 0.5f
             var x0 = floor(s).toInt()
             var f = s - x0
-            if (x0 < 0) { x0 = 0; f = 0f }
+            if (x0 < 0) {
+                x0 = 0
+                f = 0f
+            }
             colX0[ox] = x0
             colX1[ox] = minOf(x0 + 1, SRC_W - 1)
             colFx[ox] = f
@@ -36,7 +39,10 @@ object ImageComposer {
             val s = (oy + 0.5f) * SRC_H / OUT_H - 0.5f
             var y0 = floor(s).toInt()
             var f = s - y0
-            if (y0 < 0) { y0 = 0; f = 0f }
+            if (y0 < 0) {
+                y0 = 0
+                f = 0f
+            }
             rowY0[oy] = y0
             rowY1[oy] = minOf(y0 + 1, SRC_H - 1)
             rowFy[oy] = f
@@ -66,7 +72,11 @@ object ImageComposer {
                 val fx = colFx[ox]
                 val v = row[colX0[ox]] * (1f - fx) + row[colX1[ox]] * fx
                 var idx = ((v - lo) * scale).toInt()
-                if (idx < 0) idx = 0 else if (idx > 255) idx = 255
+                if (idx < 0) {
+                    idx = 0
+                } else if (idx > 255) {
+                    idx = 255
+                }
                 out[o++] = lut[idx]
             }
         }
@@ -149,7 +159,13 @@ object ImageComposer {
     fun applyMsx(thermal: IntArray, hp: IntArray, gain: Float) {
         for (i in thermal.indices) {
             var d = hp[i]
-            d = if (d > DEADZONE) d - DEADZONE else if (d < -DEADZONE) d + DEADZONE else 0
+            d = if (d > DEADZONE) {
+                d - DEADZONE
+            } else if (d < -DEADZONE) {
+                d + DEADZONE
+            } else {
+                0
+            }
             if (d == 0) continue
             val add = (d * gain).toInt()
             val p = thermal[i]

@@ -19,11 +19,7 @@ import java.io.OutputStream
  *   SET_INTERFACE(alt 1) for 2 -> read frames from bulk IN 0x85.
  * Nothing is written to the camera's firmware or settings.
  */
-class FlirCamera(
-    private val manager: UsbManager,
-    private val device: UsbDevice,
-    private val listener: Listener,
-) {
+class FlirCamera(private val manager: UsbManager, private val device: UsbDevice, private val listener: Listener) {
     interface Listener {
         fun onFrame(frame: FlirFrame)
         fun onState(message: String)
@@ -46,6 +42,7 @@ class FlirCamera(
 
     /** JSON messages from 0x81/0x83 (except battery) for whoever waits for a reply to a command. */
     private val jsonQueue = java.util.concurrent.LinkedBlockingQueue<String>()
+
     @Volatile private var lastServiceDataAt = 0L
     private val messageCounts = java.util.concurrent.ConcurrentHashMap<Int, Int>()
 
@@ -55,10 +52,13 @@ class FlirCamera(
 
     @Volatile var chunks = 0L
         private set
+
     @Volatile var bytes = 0L
         private set
+
     @Volatile var timeouts = 0L
         private set
+
     @Volatile var parser: FlirFrameParser? = null
         private set
 
@@ -83,7 +83,9 @@ class FlirCamera(
         val ep81 = findEndpoint(interfaces[0], 0x81)
         val ep83 = findEndpoint(interfaces[1], 0x83)
         ep02 = findEndpoint(interfaces[0], 0x02)
-        DiagLog.log("Interfaces: ${interfaces.keys.sorted()}, EP85=${ep85 != null}, EP81=${ep81 != null}, EP83=${ep83 != null}, EP02=${ep02 != null}")
+        DiagLog.log(
+            "Interfaces: ${interfaces.keys.sorted()}, EP85=${ep85 != null}, EP81=${ep81 != null}, EP83=${ep83 != null}, EP02=${ep02 != null}"
+        )
         if (ep85 == null) {
             fail("Endpoint 0x85 not found in interface 2")
             closeConnection()
@@ -111,10 +113,12 @@ class FlirCamera(
 
         val p = FlirFrameParser(
             onFrame = { listener.onFrame(it) },
-            onEvent = { logThrottled(it) },
+            onEvent = { logThrottled(it) }
         )
         parser = p
-        chunks = 0; bytes = 0; timeouts = 0
+        chunks = 0
+        bytes = 0
+        timeouts = 0
         running = true
 
         frameThread = Thread({ frameLoop(conn, ep85, p) }, "flir-frames").also { it.start() }
@@ -138,7 +142,9 @@ class FlirCamera(
         control(conn, "stop interface 2", 0, 2, 0)
         control(conn, "stop interface 1", 0, 1, 0)
         releaseAll(conn)
-        DiagLog.log("Camera stopped. Chunks=$chunks, bytes=$bytes, timeouts=$timeouts, frames=${parser?.framesParsed}, resyncs=${parser?.resyncs}")
+        DiagLog.log(
+            "Camera stopped. Chunks=$chunks, bytes=$bytes, timeouts=$timeouts, frames=${parser?.framesParsed}, resyncs=${parser?.resyncs}"
+        )
     }
 
     /**
@@ -175,6 +181,7 @@ class FlirCamera(
             DiagLog.log("[probe] stream number from the camera reply: $streamId")
             val id = when {
                 streamId != null && streamId >= 0 -> streamId.also { lastStreamId = it }
+
                 else -> {
                     // A negative value means the file was already opened earlier in this session; try the last known number.
                     val fallback = lastStreamId
@@ -267,13 +274,15 @@ class FlirCamera(
                 // A real timeout takes ~100 ms; an error that returns immediately means the connection is lost.
                 fastFailures = if (dt < 20) fastFailures + 1 else 0
                 if (fastFailures >= 25) {
-                    DiagLog.log("Connection to the camera lost (bulkTransfer=$n immediately ${fastFailures} times in a row)")
+                    DiagLog.log("Connection to the camera lost (bulkTransfer=$n immediately $fastFailures times in a row)")
                     running = false
                     listener.onLost()
                     break
                 }
                 if (consecutiveErrors == 1 || consecutiveErrors % 50 == 0) {
-                    DiagLog.log("EP85 bulkTransfer=$n (timeout), in a row=$consecutiveErrors, without data ${SystemClock.elapsedRealtime() - lastData} ms")
+                    DiagLog.log(
+                        "EP85 bulkTransfer=$n (timeout), in a row=$consecutiveErrors, without data ${SystemClock.elapsedRealtime() - lastData} ms"
+                    )
                 }
                 if (consecutiveErrors == 30) listener.onState("No data from the camera for ~3 s")
             }
@@ -301,7 +310,15 @@ class FlirCamera(
             }
             if (!isBattery || batteryLogged++ < 2) {
                 if (logged++ < 60) {
-                    DiagLog.log("EP${epAddress.toString(16)} message type=$type len=${payload.size} hex=${UsbDescriptorParser.hex(payload, 0, minOf(payload.size, 24))} text: $text")
+                    DiagLog.log(
+                        "EP${epAddress.toString(
+                            16
+                        )} message type=$type len=${payload.size} hex=${UsbDescriptorParser.hex(
+                            payload,
+                            0,
+                            minOf(payload.size, 24)
+                        )} text: $text"
+                    )
                 }
             }
         }

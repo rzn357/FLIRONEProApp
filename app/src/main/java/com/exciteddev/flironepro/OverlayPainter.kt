@@ -23,7 +23,7 @@ class OverlayState(
     val scaleHiC: Double?,
     val waitingForAnchor: Boolean,
     val ffcActive: Boolean,
-    val emissivity: Double,
+    val emissivity: Double
 )
 
 /** Localized texts used by the overlay painter. */
@@ -33,7 +33,7 @@ class UiTexts(
     val shutterCalibration: String,
     val demoNote: String,
     /** Format with one string argument, e.g. "ε %1$s". */
-    val emissivityFormat: String,
+    val emissivityFormat: String
 )
 
 /** Extra on-screen notes (not included in photos and videos). */
@@ -41,7 +41,7 @@ class Hud(
     val message: String?,
     val demo: Boolean,
     /** Notes are hidden while a panel or card is open over the picture. */
-    val showNotes: Boolean = true,
+    val showNotes: Boolean = true
 )
 
 /**
@@ -81,7 +81,7 @@ class OverlayPainter(private val density: Float, private val texts: UiTexts) {
         alignment: Alignment,
         showMarkers: Boolean,
         showScale: Boolean,
-        hud: Hud?,
+        hud: Hud?
     ) {
         val visible = o.mode == DisplayMode.VISIBLE
         fun px(u: Float, v: Float): Pair<Float, Float> {
@@ -198,9 +198,16 @@ class OverlayPainter(private val density: Float, private val texts: UiTexts) {
         text.textSize = dp(12f)
         val notes = ArrayList<String>()
         if (hud.demo) notes.add(texts.demoNote)
-        if (o.waitingForAnchor) notes.add(texts.waitingForCalibration)
-        else if (o.ffcActive) notes.add(texts.shutterCalibration)
-        if (o.emissivity < 0.999) notes.add(String.format(texts.locale, texts.emissivityFormat, String.format(texts.locale, "%.2f", o.emissivity)))
+        if (o.waitingForAnchor) {
+            notes.add(texts.waitingForCalibration)
+        } else if (o.ffcActive) {
+            notes.add(texts.shutterCalibration)
+        }
+        if (o.emissivity <
+            0.999
+        ) {
+            notes.add(String.format(texts.locale, texts.emissivityFormat, String.format(texts.locale, "%.2f", o.emissivity)))
+        }
         var y = dp(64f)
         for (n in notes) {
             drawLabel(canvas, t, n, (t.viewW - text.measureText(n)) / 2f - dp(4f), y, 0xFFFFD60A.toInt())

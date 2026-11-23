@@ -126,8 +126,10 @@ class DiagnosticsActivity : AppCompatActivity() {
                 permissionRequested.add(device.deviceName)
             if (needsPermission) requestPermission(device)
 
-            sb.appendLine(runCatching { UsbReport.describe(usbManager, device) }
-                .getOrElse { "!! Error describing ${device.deviceName}: $it\n" })
+            sb.appendLine(
+                runCatching { UsbReport.describe(usbManager, device) }
+                    .getOrElse { "!! Error describing ${device.deviceName}: $it\n" }
+            )
         }
 
         val text = sb.toString()

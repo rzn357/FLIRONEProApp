@@ -31,7 +31,10 @@ class FrameStatsLog(context: Context) {
 
     @Synchronized
     fun close() {
-        runCatching { writer?.flush(); writer?.close() }
+        runCatching {
+            writer?.flush()
+            writer?.close()
+        }
         writer = null
     }
 

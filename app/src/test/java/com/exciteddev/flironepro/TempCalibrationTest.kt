@@ -81,7 +81,7 @@ class TempCalibrationTest {
     fun slopeIsClampedToSaneRange() {
         val pts = listOf(
             TempCalibration.Point(y = 0.0, x = 0.0, trueC = 0.0),
-            TempCalibration.Point(y = 100000.0, x = 100.0, trueC = 50.0),
+            TempCalibration.Point(y = 100000.0, x = 100.0, trueC = 50.0)
         )
         assertEquals(TempCalibration.MAX_B, TempCalibration.fit(pts).countsPerPhi, 1e-9)
     }

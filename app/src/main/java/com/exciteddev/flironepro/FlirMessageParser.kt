@@ -77,9 +77,8 @@ class FlirMessageParser(private val onMessage: (type: Int, payload: ByteArray) -
         return -1
     }
 
-    private fun u32(o: Int): Int =
-        (buf[o].toInt() and 0xFF) or ((buf[o + 1].toInt() and 0xFF) shl 8) or
-            ((buf[o + 2].toInt() and 0xFF) shl 16) or ((buf[o + 3].toInt() and 0xFF) shl 24)
+    private fun u32(o: Int): Int = (buf[o].toInt() and 0xFF) or ((buf[o + 1].toInt() and 0xFF) shl 8) or
+        ((buf[o + 2].toInt() and 0xFF) shl 16) or ((buf[o + 3].toInt() and 0xFF) shl 24)
 
     private companion object {
         const val HEADER = 16

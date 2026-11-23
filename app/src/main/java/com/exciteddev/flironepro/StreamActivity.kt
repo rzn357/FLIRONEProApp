@@ -48,7 +48,10 @@ import kotlin.math.abs
  * calibration. The only controls on top of the picture are the settings gear, the battery and the frame rate (top) and
  * the photo / video buttons (bottom).
  */
-class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Listener {
+class StreamActivity :
+    AppCompatActivity(),
+    FlirCamera.Listener,
+    ThermalView.Listener {
 
     private lateinit var usbManager: UsbManager
     internal lateinit var thermalView: ThermalView
@@ -87,6 +90,7 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
     private var demo = false
     private var selfTest = false
     private var controlsHidden = false
+
     @Volatile private var lastFrame: FlirFrame? = null
 
     /** Display-cutout / system-bar insets (used to keep the settings screen clear of the notch). */
@@ -102,9 +106,12 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
     @Volatile private var frameCount = 0
     private var fpsStart = 0L
     private var fpsFrames = 0
+
     @Volatile private var fps = 0f
+
     @Volatile private var ffcActive = false
     private var dropAfterFfc = false
+
     @Volatile private var lastFfcState: String? = null
     private var autoTuningEnsured = false
 
@@ -112,6 +119,7 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
     @Volatile private var lastFfcActivityAt = 0L
 
     @Volatile private var ffcProbeRunning = false
+
     @Volatile private var ffcProbeCancelled = false
     private var demoFpa: Double? = null
     private val shutterRegex = Regex("\"shutterTemperature\"\\s*:\\s*([0-9.]+)")
@@ -226,7 +234,10 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         findViewById<Button>(R.id.btnAlignDown).setOnClickListener { alignChange(dy = -0.005f) }
         findViewById<Button>(R.id.btnAlignSmaller).setOnClickListener { alignChange(ds = 0.01f) }
         findViewById<Button>(R.id.btnAlignBigger).setOnClickListener { alignChange(ds = -0.01f) }
-        findViewById<Button>(R.id.btnAlignReset).setOnClickListener { settings.alignment = Alignment(); alignChange() }
+        findViewById<Button>(R.id.btnAlignReset).setOnClickListener {
+            settings.alignment = Alignment()
+            alignChange()
+        }
         findViewById<Button>(R.id.btnAlignDone).setOnClickListener { hideCards() }
 
         sound.load(MediaActionSound.SHUTTER_CLICK)
@@ -243,19 +254,25 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
             insets
         }
 
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                when {
-                    settingsPanel.isShown -> settingsPanel.hide()
-                    calCard.visibility == View.VISIBLE || alignCard.visibility == View.VISIBLE -> hideCards()
-                    controlsHidden -> setControlsHidden(false)
-                    else -> {
-                        isEnabled = false
-                        onBackPressedDispatcher.onBackPressed()
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    when {
+                        settingsPanel.isShown -> settingsPanel.hide()
+
+                        calCard.visibility == View.VISIBLE || alignCard.visibility == View.VISIBLE -> hideCards()
+
+                        controlsHidden -> setControlsHidden(false)
+
+                        else -> {
+                            isEnabled = false
+                            onBackPressedDispatcher.onBackPressed()
+                        }
                     }
                 }
             }
-        })
+        )
 
         val filter = IntentFilter().apply {
             addAction(ACTION_PERMISSION)
@@ -350,7 +367,7 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         waitingForCalibration = getString(R.string.note_waiting_ffc),
         shutterCalibration = getString(R.string.note_ffc),
         demoNote = getString(R.string.note_demo),
-        emissivityFormat = getString(R.string.note_emissivity_fmt),
+        emissivityFormat = getString(R.string.note_emissivity_fmt)
     )
 
     // ---------------------------------------------------------------- orientation
@@ -408,7 +425,11 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         // A quick restart does not make the camera calibrate its shutter again, so reuse a recent calibration meanwhile.
         if (!demo) {
             radiometry.fallbackAnchor = Radiometry.recentAnchor(System.currentTimeMillis())
-            if (radiometry.fallbackAnchor != null) DiagLog.log("Using the shutter calibration of the previous session until a new one arrives")
+            if (radiometry.fallbackAnchor !=
+                null
+            ) {
+                DiagLog.log("Using the shutter calibration of the previous session until a new one arrives")
+            }
         }
         thermalView.clear()
         processor = FrameProcessor(applicationContext, settings, radiometry, thermalView, buildTexts()).also {
@@ -533,7 +554,13 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
             logFrameStats(frame, stats, status, shutterK, tele, fpaK)
         }
         if (frameCount == 1 || frameCount % 100 == 0) {
-            DiagLog.log("Frame #$frameCount: thermal=${frame.thermalSize} jpg=${frame.jpgSize} fps=${String.format(Locale.US, "%.1f", fps)} ffc=${frame.isFfc}")
+            DiagLog.log(
+                "Frame #$frameCount: thermal=${frame.thermalSize} jpg=${frame.jpgSize} fps=${String.format(
+                    Locale.US,
+                    "%.1f",
+                    fps
+                )} ffc=${frame.isFfc}"
+            )
         }
 
         // The thermal content is not updated during the shutter calibration and on the next frame.
@@ -561,7 +588,7 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         val anchorRaw = radiometry.anchor?.raw?.let { String.format(Locale.US, "%.0f", it) } ?: ""
         statsLog?.log(
             "$wall,$frameCount,${if (frame.isFfc) 1 else 0},$ffcState,${shutterK ?: ""},${s.min},${s.max},${s.mean},${s.center},$tw," +
-                "${t(s.center)},${t(s.min)},${t(s.max)},$anchorRaw",
+                "${t(s.center)},${t(s.min)},${t(s.max)},$anchorRaw"
         )
     }
 
@@ -791,7 +818,7 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
                     now = { SystemClock.elapsedRealtime() },
                     sleep = { Thread.sleep(it) },
                     log = { DiagLog.log("[ffc] $it") },
-                    isCancelled = { ffcProbeCancelled || camera !== cam },
+                    isCancelled = { ffcProbeCancelled || camera !== cam }
                 )
             } finally {
                 ffcProbeRunning = false
@@ -841,19 +868,31 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         R.string.emis_glass to 0.92,
         R.string.emis_wood to 0.90,
         R.string.emis_oxidized to 0.80,
-        R.string.emis_shiny to 0.20,
+        R.string.emis_shiny to 0.20
     )
 
     internal fun openEmissivityDialog() {
-        val labels = emissivityPresets.map { String.format(Locale.US, "%.2f — %s", it.second, getString(it.first)) } + getString(R.string.emis_custom)
-        val current = emissivityPresets.indexOfFirst { abs(it.second - settings.emissivity) < 0.005 }.let { if (it < 0) labels.lastIndex else it }
+        val labels =
+            emissivityPresets.map { String.format(Locale.US, "%.2f — %s", it.second, getString(it.first)) } +
+                getString(R.string.emis_custom)
+        val current = emissivityPresets.indexOfFirst { abs(it.second - settings.emissivity) < 0.005 }.let {
+            if (it <
+                0
+            ) {
+                labels.lastIndex
+            } else {
+                it
+            }
+        }
         MaterialAlertDialogBuilder(this).setTitle(R.string.emis_title)
             .setSingleChoiceItems(labels.toTypedArray(), current) { d, which ->
                 d.dismiss()
                 if (which < emissivityPresets.size) {
                     setEmissivity(emissivityPresets[which].second)
                 } else {
-                    promptNumber(getString(R.string.emis_custom_title), null, String.format(Locale.US, "%.2f", settings.emissivity)) { setEmissivity(it) }
+                    promptNumber(getString(R.string.emis_custom_title), null, String.format(Locale.US, "%.2f", settings.emissivity)) {
+                        setEmissivity(it)
+                    }
                 }
             }.setNegativeButton(R.string.btn_cancel, null).show()
     }
@@ -865,7 +904,11 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
     }
 
     internal fun openReflectedDialog() {
-        promptNumber(getString(R.string.reflected_title), getString(R.string.reflected_hint), String.format(Locale.US, "%.0f", settings.reflectedC)) {
+        promptNumber(
+            getString(R.string.reflected_title),
+            getString(R.string.reflected_hint),
+            String.format(Locale.US, "%.0f", settings.reflectedC)
+        ) {
             settings.reflectedC = it.coerceIn(-50.0, 200.0)
             radiometry.reflectedC = settings.reflectedC
             settings.save()
@@ -910,7 +953,7 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         settings.alignment = a.copy(
             scale = (a.scale + ds).coerceIn(0.5f, 1.5f),
             dx = (a.dx + dx).coerceIn(-0.4f, 0.4f),
-            dy = (a.dy + dy).coerceIn(-0.4f, 0.4f),
+            dy = (a.dy + dy).coerceIn(-0.4f, 0.4f)
         )
         settings.save()
         val n = settings.alignment
@@ -952,7 +995,7 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
         promptNumber(
             getString(R.string.cal_prompt_title),
             getString(R.string.cal_prompt_hint),
-            s.tempC?.let { String.format(Locale.US, "%.1f", it) } ?: "",
+            s.tempC?.let { String.format(Locale.US, "%.1f", it) } ?: ""
         ) { addCalibrationPoint(it, s) }
     }
 
@@ -967,7 +1010,7 @@ class StreamActivity : AppCompatActivity(), FlirCamera.Listener, ThermalView.Lis
             R.string.cal_added_fmt,
             fmt1(fit.countsPerPhi),
             String.format(appLocale(), "%+.0f", fit.offsetCounts),
-            getString(if (fit.fittedSlope) R.string.cal_fit_full else R.string.cal_fit_offset_only),
+            getString(if (fit.fittedSlope) R.string.cal_fit_full else R.string.cal_fit_offset_only)
         )
         DiagLog.log("Calibration: $text; points ${settings.calibrationPoints.size}")
         toast(text)

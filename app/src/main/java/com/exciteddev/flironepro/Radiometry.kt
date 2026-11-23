@@ -80,8 +80,7 @@ class Radiometry {
     }
 
     /** The anchor in use: this session's own, else the previous session's if the sensor temperature is still close to it. */
-    fun effectiveAnchor(fpaK: Double): Anchor? =
-        anchor ?: fallbackAnchor?.takeIf { Math.abs(fpaK - it.fpaK) <= MAX_FALLBACK_FPA_GAP_K }
+    fun effectiveAnchor(fpaK: Double): Anchor? = anchor ?: fallbackAnchor?.takeIf { Math.abs(fpaK - it.fpaK) <= MAX_FALLBACK_FPA_GAP_K }
 
     /** S' (without the user offset): the raw value relative to the anchor, corrected for sensor drift. */
     fun relative(raw: Double, fpaK: Double): Double? {
@@ -90,8 +89,7 @@ class Radiometry {
     }
 
     /** Φ of the shutter at the anchor in use (the real anchor only, unless the sensor temperature is given). */
-    fun shutterPhi(fpaK: Double? = null): Double? =
-        (if (fpaK != null) effectiveAnchor(fpaK) else anchor)?.let { planck(it.shutterK) }
+    fun shutterPhi(fpaK: Double? = null): Double? = (if (fpaK != null) effectiveAnchor(fpaK) else anchor)?.let { planck(it.shutterK) }
 
     fun celsius(raw: Int, fpaK: Double): Double? = celsius(raw.toDouble(), fpaK)
 
@@ -111,7 +109,13 @@ class Radiometry {
      * A calibration point: what the sensor showed (y = S') and what was true (x = Φ_meas - Φ(T_shutter)),
      * taking into account the emissivity and the reflected temperature at the time of the measurement.
      */
-    fun calibrationPoint(relative: Double, phiShutter: Double, trueC: Double, emissivity: Double, reflectedC: Double): TempCalibration.Point {
+    fun calibrationPoint(
+        relative: Double,
+        phiShutter: Double,
+        trueC: Double,
+        emissivity: Double,
+        reflectedC: Double
+    ): TempCalibration.Point {
         val e = emissivity.coerceIn(MIN_EMISSIVITY, 1.0)
         val phiMeas = e * planck(trueC + 273.15) + (1.0 - e) * planck(reflectedC + 273.15)
         return TempCalibration.Point(y = relative, x = phiMeas - phiShutter, trueC = trueC)
@@ -140,6 +144,7 @@ class Radiometry {
         const val MAX_FALLBACK_FPA_GAP_K = 2.5
 
         @Volatile private var lastAnchor: Anchor? = null
+
         @Volatile private var lastAnchorAtMs = 0L
 
         /** Remembers the newest anchor of this process, so a restarted pipeline does not have to wait for a new calibration. */

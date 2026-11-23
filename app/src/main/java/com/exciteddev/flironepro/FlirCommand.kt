@@ -14,14 +14,14 @@ object FlirCommand {
     const val OPEN_CAMERA_FILES = """{"type":"openFile","data":{"mode":"r","path":"CameraFiles.zip"}}"""
     const val READ_STREAM_10 = """{"type":"readFile","data":{"streamIdentifier":10}}"""
 
-    fun readFile(streamIdentifier: Int): String =
-        """{"type":"readFile","data":{"streamIdentifier":$streamIdentifier}}"""
+    fun readFile(streamIdentifier: Int): String = """{"type":"readFile","data":{"streamIdentifier":$streamIdentifier}}"""
 
     fun payload(json: String): ByteArray = json.toByteArray(Charsets.UTF_8) + 0.toByte()
 
     fun header(payloadLength: Int): ByteArray {
         val h = ByteArray(16)
-        h[0] = 0xCC.toByte(); h[1] = 0x01
+        h[0] = 0xCC.toByte()
+        h[1] = 0x01
         h[4] = 0x01
         putU32(h, 8, payloadLength.toLong())
         val crc = CRC32().apply { update(h, 0, 12) }.value

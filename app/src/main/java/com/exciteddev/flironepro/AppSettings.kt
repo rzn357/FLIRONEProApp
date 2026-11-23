@@ -8,6 +8,7 @@ class AppSettings(context: Context) {
     private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences("flir_settings", Context.MODE_PRIVATE)
 
     @Volatile var mode: DisplayMode = DisplayMode.entries.getOrElse(prefs.getInt("mode", 0)) { DisplayMode.MSX }
+
     @Volatile var palette: Palette = Palette.entries.getOrElse(prefs.getInt("palette", 0)) { Palette.IRON }
 
     /** Compensate for the screen rotation automatically so the picture stays upright. */
@@ -26,9 +27,11 @@ class AppSettings(context: Context) {
 
     /** Crosshair position in normalized thermal-frame coordinates. */
     @Volatile var crossU: Float = prefs.getFloat("crossU", 0.5f)
+
     @Volatile var crossV: Float = prefs.getFloat("crossV", 0.5f)
 
     @Volatile var showMarkers: Boolean = prefs.getBoolean("showMarkers", true)
+
     @Volatile var showScale: Boolean = prefs.getBoolean("showScale", true)
 
     /** Strength of the edge overlay in MSX mode: 0 weak, 1 medium, 2 strong. */
@@ -37,10 +40,11 @@ class AppSettings(context: Context) {
     @Volatile var alignment: Alignment = Alignment(
         prefs.getFloat("alignScale", Alignment.DEFAULT_SCALE),
         prefs.getFloat("alignDx", Alignment.DEFAULT_DX),
-        prefs.getFloat("alignDy", Alignment.DEFAULT_DY),
+        prefs.getFloat("alignDy", Alignment.DEFAULT_DY)
     )
 
     @Volatile var emissivity: Double = prefs.getFloat("emissivity", 1.0f).toDouble()
+
     @Volatile var reflectedC: Double = prefs.getFloat("reflectedC", 20.0f).toDouble()
 
     /** Temperature calibration points entered by the user. */

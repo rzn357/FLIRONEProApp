@@ -18,7 +18,7 @@ class UsbDescriptorParserTest {
             // INTERFACE 0 alt 0, 1 endpoint, vendor class
             9, 4, 0, 0, 1, 0xFF, 0x00, 0x00, 0,
             // ENDPOINT 0x85 IN BULK, 512
-            7, 5, 0x85, 0x02, 0x00, 0x02, 0,
+            7, 5, 0x85, 0x02, 0x00, 0x02, 0
         )
 
         val text = UsbDescriptorParser.parse(raw)

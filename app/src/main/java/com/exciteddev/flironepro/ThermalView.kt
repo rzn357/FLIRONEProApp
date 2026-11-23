@@ -112,10 +112,14 @@ class ThermalView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     }
 
     private fun fillMatrix(t: ViewTransform, bm: Bitmap) {
-        srcPts[0] = 0f; srcPts[1] = 0f
-        srcPts[2] = bm.width.toFloat(); srcPts[3] = 0f
-        srcPts[4] = bm.width.toFloat(); srcPts[5] = bm.height.toFloat()
-        srcPts[6] = 0f; srcPts[7] = bm.height.toFloat()
+        srcPts[0] = 0f
+        srcPts[1] = 0f
+        srcPts[2] = bm.width.toFloat()
+        srcPts[3] = 0f
+        srcPts[4] = bm.width.toFloat()
+        srcPts[5] = bm.height.toFloat()
+        srcPts[6] = 0f
+        srcPts[7] = bm.height.toFloat()
         val corners = arrayOf(floatArrayOf(0f, 0f), floatArrayOf(1f, 0f), floatArrayOf(1f, 1f), floatArrayOf(0f, 1f))
         for (i in 0 until 4) {
             dstPts[2 * i] = t.toViewX(corners[i][0], corners[i][1])
@@ -152,10 +156,13 @@ class ThermalView @JvmOverloads constructor(context: Context, attrs: AttributeSe
         val s = settings ?: return false
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                downX = e.x; downY = e.y; moved = false
+                downX = e.x
+                downY = e.y
+                moved = false
                 dragging = canStartDrag(e.x, e.y, s)
                 if (dragging) {
-                    startU = s.crossU; startV = s.crossV
+                    startU = s.crossU
+                    startV = s.crossV
                     moveCrosshair(e.x, e.y, s)
                 }
             }

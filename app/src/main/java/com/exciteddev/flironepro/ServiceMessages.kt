@@ -10,26 +10,24 @@ object ServiceMessages {
     private val chargingCurrentRegex = Regex("\"chargingCurrent\"\\s*:\\s*(-?[0-9.]+)")
 
     /** Updates the battery state from a JSON message. Messages that are not about the battery return the previous state unchanged. */
-    fun updateBattery(prev: BatteryState, json: String): BatteryState {
-        return when {
-            "batteryVoltageUpdate" in json -> {
-                val pct = percentageRegex.find(json)?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(0, 100)
-                val v = voltageRegex.find(json)?.groupValues?.get(1)?.toDoubleOrNull()
-                BatteryState(pct ?: prev.percentage, v ?: prev.voltage, prev.charging)
-            }
-
-            "batteryChargingStateUpdate" in json -> {
-                val st = chargingStateRegex.find(json)?.groupValues?.get(1)
-                val charging = st?.let { it.contains("Charging") && !it.contains("NoCharging") }
-                BatteryState(prev.percentage, prev.voltage, charging ?: prev.charging)
-            }
-
-            "batteryChargingCurrentUpdate" in json -> {
-                val cur = chargingCurrentRegex.find(json)?.groupValues?.get(1)?.toDoubleOrNull()
-                BatteryState(prev.percentage, prev.voltage, if (cur != null && cur > 0.0) true else prev.charging)
-            }
-
-            else -> prev
+    fun updateBattery(prev: BatteryState, json: String): BatteryState = when {
+        "batteryVoltageUpdate" in json -> {
+            val pct = percentageRegex.find(json)?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(0, 100)
+            val v = voltageRegex.find(json)?.groupValues?.get(1)?.toDoubleOrNull()
+            BatteryState(pct ?: prev.percentage, v ?: prev.voltage, prev.charging)
         }
+
+        "batteryChargingStateUpdate" in json -> {
+            val st = chargingStateRegex.find(json)?.groupValues?.get(1)
+            val charging = st?.let { it.contains("Charging") && !it.contains("NoCharging") }
+            BatteryState(prev.percentage, prev.voltage, charging ?: prev.charging)
+        }
+
+        "batteryChargingCurrentUpdate" in json -> {
+            val cur = chargingCurrentRegex.find(json)?.groupValues?.get(1)?.toDoubleOrNull()
+            BatteryState(prev.percentage, prev.voltage, if (cur != null && cur > 0.0) true else prev.charging)
+        }
+
+        else -> prev
     }
 }

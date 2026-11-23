@@ -24,7 +24,7 @@ object ShutterCalibration {
     private val TYPE_NAMES = listOf(
         "performTuning", "tuning", "tune", "ffc", "performFfc", "performFFC", "triggerFfc", "runFfc", "startFfc", "doFfc",
         "ffcRequest", "requestFfc", "calibrate", "calibrateShutter", "nuc", "tuningRequest", "requestTuning", "startTuning",
-        "runTuning", "doTuning", "manualFfc", "manualTuning",
+        "runTuning", "doTuning", "manualFfc", "manualTuning"
     )
 
     /** Candidate commands, most likely first. Replies to unknown commands are ignored by the camera. */
@@ -55,7 +55,7 @@ object ShutterCalibration {
         /** The first command could not be written to the camera. */
         COULD_NOT_SEND,
 
-        CANCELLED,
+        CANCELLED
     }
 
     class Result(val command: String?, val tried: Int, val outcome: Outcome) {
@@ -77,7 +77,7 @@ object ShutterCalibration {
         now: () -> Long,
         sleep: (Long) -> Unit,
         log: (String) -> Unit,
-        isCancelled: () -> Boolean = { false },
+        isCancelled: () -> Boolean = { false }
     ): Result {
         fun waitFor(timeoutMs: Long, condition: () -> Boolean): Boolean {
             val end = now() + timeoutMs

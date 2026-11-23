@@ -15,12 +15,7 @@ import java.io.RandomAccessFile
  * H.264 (MP4) video recording: frames are drawn on the Canvas of the codec's input surface, so the file gets exactly what is shown
  * on the screen (for the selected mode), with the temperature marks. If debugFile is set, the video is written to that file instead of the gallery.
  */
-class VideoRecorder(
-    private val context: Context,
-    val width: Int,
-    val height: Int,
-    private val debugFile: File? = null,
-) {
+class VideoRecorder(private val context: Context, val width: Int, val height: Int, private val debugFile: File? = null) {
     private var codec: MediaCodec? = null
     private var muxer: MediaMuxer? = null
     private var surface: Surface? = null
@@ -35,6 +30,7 @@ class VideoRecorder(
 
     @Volatile var framesEncoded = 0
         private set
+
     @Volatile var fileName: String? = null
         private set
 
@@ -118,6 +114,7 @@ class VideoRecorder(
                 val idx = c.dequeueOutputBuffer(info, 10_000)
                 when {
                     idx == MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+
                     idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         val m = muxer ?: return
                         m.addTrack(c.outputFormat)

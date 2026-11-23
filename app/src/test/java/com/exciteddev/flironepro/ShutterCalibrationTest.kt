@@ -19,7 +19,7 @@ class ShutterCalibrationTest {
         private val good: String?,
         private val wantedAt: Long = 30_000L,
         private val ignoresAutoOff: Boolean = false,
-        private val failAutoOff: Boolean = false,
+        private val failAutoOff: Boolean = false
     ) {
         var time = 0L
         val sent = ArrayList<String>()
@@ -40,7 +40,13 @@ class ShutterCalibrationTest {
         private fun ranByItself() = (!autoOff || ignoresAutoOff) && time >= wantedAt + 500
         private fun done() = ffcStart != Long.MIN_VALUE || ranByItself()
         fun wanted() = time >= wantedAt && !done()
-        fun started(): Long = if (ffcStart != Long.MIN_VALUE) ffcStart else if (ranByItself()) wantedAt + 500 else Long.MIN_VALUE
+        fun started(): Long = if (ffcStart != Long.MIN_VALUE) {
+            ffcStart
+        } else if (ranByItself()) {
+            wantedAt + 500
+        } else {
+            Long.MIN_VALUE
+        }
         fun startedSince(t: Long): Boolean {
             val s = started()
             return s != Long.MIN_VALUE && s >= t && time >= s
@@ -52,16 +58,18 @@ class ShutterCalibrationTest {
         }
 
         fun now() = time
-        fun sleep(ms: Long) { time += ms }
+        fun sleep(ms: Long) {
+            time += ms
+        }
     }
 
     private fun run(
         cam: FakeCamera,
         candidates: List<String>,
         cancelled: () -> Boolean = { false },
-        log: MutableList<String> = ArrayList(),
+        log: MutableList<String> = ArrayList()
     ) = ShutterCalibration.probe(
-        candidates, cam::send, cam::startedSince, cam::inProgress, cam::wanted, cam::now, cam::sleep, { log.add(it) }, cancelled,
+        candidates, cam::send, cam::startedSince, cam::inProgress, cam::wanted, cam::now, cam::sleep, { log.add(it) }, cancelled
     )
 
     @Test
@@ -118,7 +126,14 @@ class ShutterCalibrationTest {
         val cam = FakeCamera("a")
         val log = ArrayList<String>()
         val r = ShutterCalibration.probe(
-            listOf("a", "b"), cam::send, cam::startedSince, { true }, cam::wanted, cam::now, cam::sleep, { log.add(it) },
+            listOf("a", "b"),
+            cam::send,
+            cam::startedSince,
+            { true },
+            cam::wanted,
+            cam::now,
+            cam::sleep,
+            { log.add(it) }
         )
         assertEquals(Outcome.CAMERA_BUSY, r.outcome)
         assertTrue(cam.sent.isEmpty())
@@ -139,7 +154,12 @@ class ShutterCalibrationTest {
         val r = ShutterCalibration.probe(
             listOf("a", "b"),
             { c -> if (c == "a" && candidateCalls++ == 0) false else cam.send(c) },
-            cam::startedSince, cam::inProgress, cam::wanted, cam::now, cam::sleep, {},
+            cam::startedSince,
+            cam::inProgress,
+            cam::wanted,
+            cam::now,
+            cam::sleep,
+            {}
         )
         assertEquals("b", r.command)
     }

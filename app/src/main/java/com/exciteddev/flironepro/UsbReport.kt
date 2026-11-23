@@ -16,7 +16,9 @@ object UsbReport {
         val flir = device.vendorId == FLIR_VENDOR_ID
         sb.appendLine("=== ${device.deviceName}${if (flir) "   <-- FLIR" else ""} ===")
         sb.appendLine("VID:PID = ${UsbDescriptorParser.hex16(device.vendorId)}:${UsbDescriptorParser.hex16(device.productId)}")
-        sb.appendLine("class=${UsbDescriptorParser.className(device.deviceClass)} sub=${device.deviceSubclass} proto=${device.deviceProtocol}")
+        sb.appendLine(
+            "class=${UsbDescriptorParser.className(device.deviceClass)} sub=${device.deviceSubclass} proto=${device.deviceProtocol}"
+        )
 
         val granted = manager.hasPermission(device)
         sb.appendLine("Access permission: ${if (granted) "yes" else "no"}")

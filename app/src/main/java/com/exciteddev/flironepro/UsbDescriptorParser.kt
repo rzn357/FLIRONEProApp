@@ -80,10 +80,9 @@ object UsbDescriptorParser {
 
     private fun bcd(v: Int) = "${v shr 8 and 0xFF}.${(v and 0xFF).toString(16).padStart(2, '0')}"
 
-    fun hex(raw: ByteArray, off: Int, len: Int): String =
-        (off until (off + len).coerceAtMost(raw.size)).joinToString(" ") {
-            raw.u8(it).toString(16).padStart(2, '0')
-        }
+    fun hex(raw: ByteArray, off: Int, len: Int): String = (off until (off + len).coerceAtMost(raw.size)).joinToString(" ") {
+        raw.u8(it).toString(16).padStart(2, '0')
+    }
 
     private fun ByteArray.u8(i: Int) = this[i].toInt() and 0xFF
     private fun ByteArray.u16(i: Int) = u8(i) or (u8(i + 1) shl 8)

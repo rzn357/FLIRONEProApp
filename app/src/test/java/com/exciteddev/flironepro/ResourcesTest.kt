@@ -1,10 +1,10 @@
 package com.exciteddev.flironepro
 
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
 
 /** The two language files (English default, Ukrainian) must stay in sync. */
 class ResourcesTest {

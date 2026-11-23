@@ -9,12 +9,7 @@ package com.exciteddev.flironepro
  *   12..15 ThermalSize, 16..19 JpgSize, 20..23 StatusSize (LE)
  *   28..   thermal data, then the visible-camera JPEG, then the text status
  */
-class FlirFrame(
-    val data: ByteArray,
-    val thermalSize: Int,
-    val jpgSize: Int,
-    val statusSize: Int,
-) {
+class FlirFrame(val data: ByteArray, val thermalSize: Int, val jpgSize: Int, val statusSize: Int) {
     val thermalOffset: Int get() = HEADER_SIZE
     val jpgOffset: Long get() = HEADER_SIZE.toLong() + thermalSize
     val statusOffset: Long get() = jpgOffset + jpgSize
@@ -47,8 +42,7 @@ class FlirFrame(
         return sb.toString()
     }
 
-    fun jpegBytes(): ByteArray? =
-        if (hasJpeg) data.copyOfRange(jpgOffset.toInt(), jpgOffset.toInt() + jpgSize) else null
+    fun jpegBytes(): ByteArray? = if (hasJpeg) data.copyOfRange(jpgOffset.toInt(), jpgOffset.toInt() + jpgSize) else null
 
     companion object {
         const val HEADER_SIZE = 28

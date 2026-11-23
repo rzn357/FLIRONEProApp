@@ -8,7 +8,7 @@ enum class Palette {
     GRAY,
     BLACK_HOT,
     LAVA,
-    ARCTIC,
+    ARCTIC
 }
 
 object Palettes {
@@ -31,7 +31,7 @@ object Palettes {
         floatArrayOf(0.42f, 190f, 20f, 70f),
         floatArrayOf(0.62f, 245f, 90f, 10f),
         floatArrayOf(0.82f, 255f, 190f, 30f),
-        floatArrayOf(1.00f, 255f, 255f, 220f),
+        floatArrayOf(1.00f, 255f, 255f, 220f)
     )
 
     private val lavaStops = arrayOf(
@@ -39,7 +39,7 @@ object Palettes {
         floatArrayOf(0.25f, 120f, 0f, 0f),
         floatArrayOf(0.50f, 255f, 120f, 0f),
         floatArrayOf(0.75f, 255f, 230f, 0f),
-        floatArrayOf(1.00f, 255f, 255f, 255f),
+        floatArrayOf(1.00f, 255f, 255f, 255f)
     )
 
     private val arcticStops = arrayOf(
@@ -49,7 +49,7 @@ object Palettes {
         floatArrayOf(0.55f, 255f, 255f, 255f),
         floatArrayOf(0.72f, 255f, 230f, 0f),
         floatArrayOf(0.90f, 255f, 40f, 0f),
-        floatArrayOf(1.00f, 140f, 0f, 0f),
+        floatArrayOf(1.00f, 140f, 0f, 0f)
     )
 
     private fun gradient(stops: Array<FloatArray>, t: Float): Int {
@@ -61,7 +61,7 @@ object Palettes {
                 return rgb(
                     (a[1] + (b[1] - a[1]) * f).toInt(),
                     (a[2] + (b[2] - a[2]) * f).toInt(),
-                    (a[3] + (b[3] - a[3]) * f).toInt(),
+                    (a[3] + (b[3] - a[3]) * f).toInt()
                 )
             }
         }
@@ -94,18 +94,11 @@ class ThermalStats(
     val minY: Int,
     val maxX: Int,
     val maxY: Int,
-    val mean: Int = 0,
+    val mean: Int = 0
 )
 
 /** Minimum and maximum of the smoothed thermal image (for the hottest / coldest point markers). */
-class Extremes(
-    val minX: Int,
-    val minY: Int,
-    val minValue: Int,
-    val maxX: Int,
-    val maxY: Int,
-    val maxValue: Int,
-)
+class Extremes(val minX: Int, val minY: Int, val minValue: Int, val maxX: Int, val maxY: Int, val maxValue: Int)
 
 object ThermalImage {
     const val W = 160
@@ -160,8 +153,14 @@ object ThermalImage {
         for (i in raw.indices) {
             val v = raw[i]
             sum += v
-            if (v < min) { min = v; minI = i }
-            if (v > max) { max = v; maxI = i }
+            if (v < min) {
+                min = v
+                minI = i
+            }
+            if (v > max) {
+                max = v
+                maxI = i
+            }
         }
         val center = (raw[59 * W + 79] + raw[59 * W + 80] + raw[60 * W + 79] + raw[60 * W + 80]) / 4
         return ThermalStats(min, max, center, minI % W, minI / W, maxI % W, maxI / W, (sum / raw.size).toInt())
@@ -197,9 +196,11 @@ object ThermalImage {
             for (x in 0 until W) {
                 val xa = maxOf(0, x - 1)
                 val xc = minOf(W - 1, x + 1)
-                out[yb + x] = (raw[ya + xa] + raw[ya + x] + raw[ya + xc] +
-                    raw[yb + xa] + raw[yb + x] + raw[yb + xc] +
-                    raw[yc + xa] + raw[yc + x] + raw[yc + xc]) / 9
+                out[yb + x] = (
+                    raw[ya + xa] + raw[ya + x] + raw[ya + xc] +
+                        raw[yb + xa] + raw[yb + x] + raw[yb + xc] +
+                        raw[yc + xa] + raw[yc + x] + raw[yc + xc]
+                    ) / 9
             }
         }
     }
@@ -213,8 +214,14 @@ object ThermalImage {
         for (y in BORDER until H - BORDER) {
             for (x in BORDER until W - BORDER) {
                 val v = smoothed[y * W + x]
-                if (v < minV) { minV = v; minI = y * W + x }
-                if (v > maxV) { maxV = v; maxI = y * W + x }
+                if (v < minV) {
+                    minV = v
+                    minI = y * W + x
+                }
+                if (v > maxV) {
+                    maxV = v
+                    maxI = y * W + x
+                }
             }
         }
         return Extremes(minI % W, minI / W, minV, maxI % W, maxI / W, maxV)

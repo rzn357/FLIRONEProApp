@@ -29,14 +29,20 @@ class ServiceMessagesTest {
 
     @Test
     fun chargingStateIsDetected() {
-        val b = ServiceMessages.updateBattery(BatteryState(50), """{"type":"batteryChargingStateUpdate","data":{"chargingState":"stateCharging"}}""")
+        val b = ServiceMessages.updateBattery(
+            BatteryState(50),
+            """{"type":"batteryChargingStateUpdate","data":{"chargingState":"stateCharging"}}"""
+        )
         assertEquals(true, b.charging)
         assertTrue(b.charging == true)
     }
 
     @Test
     fun positiveChargingCurrentMeansCharging() {
-        val b = ServiceMessages.updateBattery(BatteryState(50), """{"type":"batteryChargingCurrentUpdate","data":{"chargingCurrent":450.5}}""")
+        val b = ServiceMessages.updateBattery(
+            BatteryState(50),
+            """{"type":"batteryChargingCurrentUpdate","data":{"chargingCurrent":450.5}}"""
+        )
         assertEquals(true, b.charging)
         val z = ServiceMessages.updateBattery(BatteryState(50, null, false), current0)
         assertEquals(false, z.charging)

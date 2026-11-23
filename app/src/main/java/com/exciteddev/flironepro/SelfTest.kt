@@ -38,7 +38,10 @@ internal class SelfTest(private val a: StreamActivity, private val lang: String?
             // Portrait: every display mode, with the automatic orientation (screen rotation 0).
             a.forcedDisplayRotation = 0
             for (m in DisplayMode.entries) {
-                a.onUiAndWait { s.mode = m; a.updateRotation() }
+                a.onUiAndWait {
+                    s.mode = m
+                    a.updateRotation()
+                }
                 Thread.sleep(900)
                 snapshot(1080, 2160, "${prefix}portrait_${m.name}.png")
             }
@@ -52,7 +55,11 @@ internal class SelfTest(private val a: StreamActivity, private val lang: String?
             a.onUiAndWait { a.refreshRecordingUi() }
 
             // Settings panel and tool cards.
-            a.onUiAndWait { s.mode = DisplayMode.MSX; a.testViewSize = Pair(1080, 2160); a.openSettingsForTest(true) }
+            a.onUiAndWait {
+                s.mode = DisplayMode.MSX
+                a.testViewSize = Pair(1080, 2160)
+                a.openSettingsForTest(true)
+            }
             Thread.sleep(300)
             snapshot(1080, 2160, "${prefix}portrait_settings.png")
 
@@ -69,23 +76,37 @@ internal class SelfTest(private val a: StreamActivity, private val lang: String?
                 Thread.sleep(300)
                 DiagLog.log("SELFTEST: tap on the Lava color strip -> palette ${s.palette}")
                 snapshot(1080, 2160, "${prefix}portrait_settings_strip_tap.png")
-                a.onUiAndWait { s.palette = Palette.IRON; a.onSettingsChanged() }
+                a.onUiAndWait {
+                    s.palette = Palette.IRON
+                    a.onSettingsChanged()
+                }
             } else {
                 DiagLog.log("SELFTEST: the Lava color strip was not found")
             }
             a.onUiAndWait {
                 a.openSettingsForTest(false)
                 a.testViewSize = Pair(1080, 3400)
-                a.rootView.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(3400, View.MeasureSpec.EXACTLY))
+                a.rootView.measure(
+                    View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(3400, View.MeasureSpec.EXACTLY)
+                )
                 a.rootView.layout(0, 0, 1080, 3400)
                 a.openSettingsForTest(true)
             }
             snapshot(1080, 3400, "${prefix}portrait_settings_full.png")
             a.onUiAndWait { a.openSettingsForTest(false) }
-            a.onUiAndWait { s.palette = Palette.LAVA; a.onSettingsChanged() }
+            a.onUiAndWait {
+                s.palette = Palette.LAVA
+                a.onSettingsChanged()
+            }
             Thread.sleep(900)
             snapshot(1080, 2160, "${prefix}portrait_settings_lava.png")
-            a.onUiAndWait { s.palette = Palette.IRON; a.onSettingsChanged(); a.openSettingsForTest(false); a.openCalibrationCard() }
+            a.onUiAndWait {
+                s.palette = Palette.IRON
+                a.onSettingsChanged()
+                a.openSettingsForTest(false)
+                a.openCalibrationCard()
+            }
             Thread.sleep(500)
             snapshot(1080, 2160, "${prefix}portrait_calibration.png")
             a.onUiAndWait { a.openAlignmentCard() }
@@ -104,10 +125,16 @@ internal class SelfTest(private val a: StreamActivity, private val lang: String?
             a.onUiAndWait { a.updateRotation() }
             Thread.sleep(900)
             snapshot(2160, 1080, "${prefix}landscape_MSX.png")
-            a.onUiAndWait { a.testViewSize = Pair(2160, 1080); a.openSettingsForTest(true) }
+            a.onUiAndWait {
+                a.testViewSize = Pair(2160, 1080)
+                a.openSettingsForTest(true)
+            }
             Thread.sleep(300)
             snapshot(2160, 1080, "${prefix}landscape_settings.png")
-            a.onUiAndWait { a.openSettingsForTest(false); s.fillScreen = true }
+            a.onUiAndWait {
+                a.openSettingsForTest(false)
+                s.fillScreen = true
+            }
             Thread.sleep(600)
             snapshot(2160, 1080, "${prefix}landscape_fill.png")
             a.onUiAndWait { s.fillScreen = false }
@@ -120,7 +147,10 @@ internal class SelfTest(private val a: StreamActivity, private val lang: String?
             // Performance: 4.5 s per mode, see the "Frame processing" lines in the log.
             a.forcedDisplayRotation = 0
             for (m in DisplayMode.entries) {
-                a.onUiAndWait { s.mode = m; a.updateRotation() }
+                a.onUiAndWait {
+                    s.mode = m
+                    a.updateRotation()
+                }
                 Thread.sleep(4500)
             }
             a.onUiAndWait { s.mode = DisplayMode.MSX }
@@ -157,7 +187,10 @@ internal class SelfTest(private val a: StreamActivity, private val lang: String?
             a.onUiAndWait {
                 s.rotation = 90
                 val tv = a.thermalView
-                tv.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1500, View.MeasureSpec.EXACTLY))
+                tv.measure(
+                    View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(1500, View.MeasureSpec.EXACTLY)
+                )
                 tv.layout(0, 0, 1080, 1500)
                 val tr = ViewTransform(1080f, 1500f, 4f / 3f, 90, false)
                 val x = tr.toViewX(0.25f, 0.75f)
@@ -250,7 +283,10 @@ internal class SelfTest(private val a: StreamActivity, private val lang: String?
         a.onUiAndWait {
             a.testViewSize = Pair(w, h)
             a.refreshForTest()
-            a.rootView.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY))
+            a.rootView.measure(
+                View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY)
+            )
             a.rootView.layout(0, 0, w, h)
             a.rootView.draw(Canvas(bm))
         }

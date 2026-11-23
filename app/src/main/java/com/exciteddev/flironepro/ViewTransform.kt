@@ -4,8 +4,7 @@ package com.exciteddev.flironepro
 enum class DisplayMode {
     MSX,
     THERMAL,
-    VISIBLE,
-    ;
+    VISIBLE
 }
 
 /**
@@ -64,7 +63,7 @@ class ViewTransform(
     contentAspect: Float,
     val rotation: Int,
     val mirror: Boolean,
-    val cover: Boolean = false,
+    val cover: Boolean = false
 ) {
     val destLeft: Float
     val destTop: Float

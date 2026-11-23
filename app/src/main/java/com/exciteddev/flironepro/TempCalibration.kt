@@ -39,8 +39,7 @@ object TempCalibration {
     }
 
     /** Serialization for SharedPreferences: "y,x,t;y,x,t". */
-    fun serialize(points: List<Point>): String =
-        points.joinToString(";") { "${it.y},${it.x},${it.trueC}" }
+    fun serialize(points: List<Point>): String = points.joinToString(";") { "${it.y},${it.x},${it.trueC}" }
 
     fun parse(s: String?): List<Point> {
         if (s.isNullOrBlank()) return emptyList()

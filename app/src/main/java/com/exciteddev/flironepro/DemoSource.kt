@@ -6,11 +6,8 @@ import java.io.File
  * Demo frame source: replays the raw frames saved earlier (.bin files in the frames folder) in a loop, so the whole UI
  * can be tested without a camera. Demo temperatures are not accurate: frames from different sessions have different reference levels.
  */
-class DemoSource(
-    private val dir: File,
-    private val frameMs: Long = FRAME_MS,
-    private val onFrame: (FlirFrame) -> Unit,
-) : Thread("flir-demo") {
+class DemoSource(private val dir: File, private val frameMs: Long = FRAME_MS, private val onFrame: (FlirFrame) -> Unit) :
+    Thread("flir-demo") {
     @Volatile private var running = true
     var frameCount = 0
         private set

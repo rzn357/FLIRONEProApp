@@ -78,7 +78,7 @@ class SettingsPanel(private val a: StreamActivity, private val host: FrameLayout
         root.layoutParams = FrameLayout.LayoutParams(
             if (landscape) minOf(dp(560), w) else ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT,
-            Gravity.CENTER_HORIZONTAL,
+            Gravity.CENTER_HORIZONTAL
         )
         scroll.scrollTo(0, 0)
         rebuild()
@@ -109,58 +109,108 @@ class SettingsPanel(private val a: StreamActivity, private val host: FrameLayout
             listOf(
                 Triple(DisplayMode.MSX, a.getString(R.string.mode_msx), null),
                 Triple(DisplayMode.THERMAL, a.getString(R.string.mode_thermal), null),
-                Triple(DisplayMode.VISIBLE, a.getString(R.string.mode_visible), null),
+                Triple(DisplayMode.VISIBLE, a.getString(R.string.mode_visible), null)
             ),
-            s.mode,
-        ) { s.mode = it; changed() }
+            s.mode
+        ) {
+            s.mode = it
+            changed()
+        }
 
         header(R.string.sec_palette)
-        radios(Palette.entries.map { Triple(it, paletteLabel(it), swatch(it)) }, s.palette) { s.palette = it; changed() }
+        radios(Palette.entries.map { Triple(it, paletteLabel(it), swatch(it)) }, s.palette) {
+            s.palette = it
+            changed()
+        }
 
         header(R.string.sec_temperature)
-        action(a.getString(R.string.row_emissivity_fmt, String.format(a.appLocale(), "%.2f", s.emissivity))) { hide(); a.openEmissivityDialog() }
-        action(a.getString(R.string.row_reflected_fmt, String.format(a.appLocale(), "%.0f", s.reflectedC))) { hide(); a.openReflectedDialog() }
-        action(a.getString(R.string.row_calibration)) { hide(); a.openCalibrationCard() }
-        action(a.getString(R.string.row_ffc)) { hide(); a.requestShutterCalibration() }
+        action(a.getString(R.string.row_emissivity_fmt, String.format(a.appLocale(), "%.2f", s.emissivity))) {
+            hide()
+            a.openEmissivityDialog()
+        }
+        action(a.getString(R.string.row_reflected_fmt, String.format(a.appLocale(), "%.0f", s.reflectedC))) {
+            hide()
+            a.openReflectedDialog()
+        }
+        action(a.getString(R.string.row_calibration)) {
+            hide()
+            a.openCalibrationCard()
+        }
+        action(a.getString(R.string.row_ffc)) {
+            hide()
+            a.requestShutterCalibration()
+        }
 
         header(R.string.sec_msx)
         radios(
             listOf(
                 Triple(0, a.getString(R.string.msx_weak), null),
                 Triple(1, a.getString(R.string.msx_medium), null),
-                Triple(2, a.getString(R.string.msx_strong), null),
+                Triple(2, a.getString(R.string.msx_strong), null)
             ),
-            s.msxLevel.coerceIn(0, 2),
-        ) { s.msxLevel = it; changed() }
-        action(a.getString(R.string.row_msx_alignment)) { hide(); a.openAlignmentCard() }
+            s.msxLevel.coerceIn(0, 2)
+        ) {
+            s.msxLevel = it
+            changed()
+        }
+        action(a.getString(R.string.row_msx_alignment)) {
+            hide()
+            a.openAlignmentCard()
+        }
 
         header(R.string.sec_image)
-        switch(R.string.sw_auto_orientation, s.autoRotate) { s.autoRotate = it; changed() }
+        switch(R.string.sw_auto_orientation, s.autoRotate) {
+            s.autoRotate = it
+            changed()
+        }
         action(a.getString(R.string.row_rotate_fmt, s.rotationOffset)) {
             s.rotationOffset = (s.rotationOffset + 90) % 360
             changed()
             rebuild()
         }
-        switch(R.string.sw_mirror, s.mirror) { s.mirror = it; changed() }
-        switch(R.string.sw_fill, s.fillScreen) { s.fillScreen = it; changed() }
-        switch(R.string.sw_hide_controls, false) { if (it) { hide(); a.setControlsHidden(true) } }
+        switch(R.string.sw_mirror, s.mirror) {
+            s.mirror = it
+            changed()
+        }
+        switch(R.string.sw_fill, s.fillScreen) {
+            s.fillScreen = it
+            changed()
+        }
+        switch(R.string.sw_hide_controls, false) {
+            if (it) {
+                hide()
+                a.setControlsHidden(true)
+            }
+        }
 
         header(R.string.sec_overlays)
-        switch(R.string.sw_markers, s.showMarkers) { s.showMarkers = it; changed() }
-        switch(R.string.sw_scale, s.showScale) { s.showScale = it; changed() }
+        switch(R.string.sw_markers, s.showMarkers) {
+            s.showMarkers = it
+            changed()
+        }
+        switch(R.string.sw_scale, s.showScale) {
+            s.showScale = it
+            changed()
+        }
 
         header(R.string.sec_language)
         radios(
             listOf(
                 Triple("uk", a.getString(R.string.lang_uk), null),
-                Triple("en", a.getString(R.string.lang_en), null),
+                Triple("en", a.getString(R.string.lang_en), null)
             ),
-            a.currentLanguageTag(),
+            a.currentLanguageTag()
         ) { if (it != a.currentLanguageTag()) a.setLanguage(it) }
 
         header(R.string.sec_developer)
-        action(a.getString(R.string.row_usb_diag)) { hide(); a.openDiagnostics() }
-        action(a.getString(R.string.row_save_raw)) { a.saveRawFrame(); rebuild() }
+        action(a.getString(R.string.row_usb_diag)) {
+            hide()
+            a.openDiagnostics()
+        }
+        action(a.getString(R.string.row_save_raw)) {
+            a.saveRawFrame()
+            rebuild()
+        }
 
         if (keepScroll > 0) scroll.post { scroll.scrollTo(0, keepScroll) }
     }
@@ -173,7 +223,7 @@ class SettingsPanel(private val a: StreamActivity, private val host: FrameLayout
             Palette.BLACK_HOT -> R.string.palette_black_hot
             Palette.LAVA -> R.string.palette_lava
             Palette.ARCTIC -> R.string.palette_arctic
-        },
+        }
     )
 
     /** A small gradient strip previewing the palette colors. */
@@ -224,7 +274,7 @@ class SettingsPanel(private val a: StreamActivity, private val host: FrameLayout
 
     private fun tint(): ColorStateList = ColorStateList(
         arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-        intArrayOf(amber, grey),
+        intArrayOf(amber, grey)
     )
 
     /** Radio buttons with manual mutual exclusion, so a row can also hold an extra view (e.g. a palette swatch). */
@@ -267,7 +317,7 @@ class SettingsPanel(private val a: StreamActivity, private val host: FrameLayout
             thumbTintList = tint()
             trackTintList = ColorStateList(
                 arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                intArrayOf(0x66FFB74D, 0x44FFFFFF),
+                intArrayOf(0x66FFB74D, 0x44FFFFFF)
             )
             setOnCheckedChangeListener { _, isOn -> onChange(isOn) }
             shadowed()

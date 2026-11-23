@@ -4,10 +4,7 @@ package com.exciteddev.flironepro
  * Assembles frames from the byte stream of endpoint 0x85. Independent of how USB split the data into chunks:
  * it looks for the magic bytes, reads the size and waits until the frame is complete.
  */
-class FlirFrameParser(
-    private val onFrame: (FlirFrame) -> Unit,
-    private val onEvent: (String) -> Unit = {},
-) {
+class FlirFrameParser(private val onFrame: (FlirFrame) -> Unit, private val onEvent: (String) -> Unit = {}) {
     private var buf = ByteArray(512 * 1024)
     private var len = 0
 
@@ -86,11 +83,10 @@ class FlirFrameParser(
         return -1
     }
 
-    private fun u32(o: Int): Int =
-        (buf[o].toInt() and 0xFF) or
-            ((buf[o + 1].toInt() and 0xFF) shl 8) or
-            ((buf[o + 2].toInt() and 0xFF) shl 16) or
-            ((buf[o + 3].toInt() and 0xFF) shl 24)
+    private fun u32(o: Int): Int = (buf[o].toInt() and 0xFF) or
+        ((buf[o + 1].toInt() and 0xFF) shl 8) or
+        ((buf[o + 2].toInt() and 0xFF) shl 16) or
+        ((buf[o + 3].toInt() and 0xFF) shl 24)
 
     private fun ensureCapacity(need: Int) {
         if (need <= buf.size) return
