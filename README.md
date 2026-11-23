@@ -1,6 +1,11 @@
 # FLIR ONE Pro for Android: an independent thermal-camera viewer
 
 [![CI](https://github.com/rzn357/FLIRONEProApp/actions/workflows/ci.yml/badge.svg)](https://github.com/rzn357/FLIRONEProApp/actions/workflows/ci.yml)
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)](LICENSE)
+[![Platform: Android 10+](https://img.shields.io/badge/platform-Android%2010%2B%20(API%2029)-3DDC84?logo=android&logoColor=white)](#build)
+[![Language: Kotlin](https://img.shields.io/badge/language-Kotlin-7F52FF?logo=kotlin&logoColor=white)](app/src)
+[![Code style: detekt](https://img.shields.io/badge/code%20style-detekt-informational)](#code-quality-checks)
+[![Last commit](https://img.shields.io/github/last-commit/rzn357/FLIRONEProApp)](https://github.com/rzn357/FLIRONEProApp/commits/main)
 
 An Android app (Kotlin) that shows the live picture of a **FLIR ONE Pro** thermal camera (USB-C) and measures temperatures
 with it. The camera is driven by **its own USB driver** written from scratch on top of Android's USB host API: no vendor
@@ -129,7 +134,7 @@ Requirements: Android Studio (or a JDK 25, the version set in `gradle/gradle-dae
 or newer and a device with USB host support (USB-C OTG).
 
 ```
-git clone <this repository>
+git clone https://github.com/rzn357/FLIRONEProApp.git
 cd FLIRONEProApp
 ./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
 ./gradlew installDebug           # installs on a connected device
