@@ -98,7 +98,8 @@ class Radiometry {
 
     /** Undoes the sensor model, the emissivity and the reflection: the temperature of the object for S' = [rel]. */
     private fun objectTemperature(rel: Double, fpaK: Double): Double? {
-        val phiMeas = shutterPhi(fpaK)!! + (rel - offsetCounts) / countsPerPhi
+        val phiShutter = shutterPhi(fpaK) ?: return null
+        val phiMeas = phiShutter + (rel - offsetCounts) / countsPerPhi
         val e = emissivity.coerceIn(MIN_EMISSIVITY, 1.0)
         val phiRefl = planck(reflectedC + KELVIN)
         val phiObj = (phiMeas - (1.0 - e) * phiRefl) / e

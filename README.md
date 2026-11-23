@@ -234,6 +234,11 @@ Two linters check the Kotlin code:
 | detekt | code smells: complexity, long methods, magic numbers, ... | `./gradlew detekt` | (by hand) |
 
 Both must report no problems before code is committed. The detekt settings are in `config/detekt/detekt.yml`.
+
+> detekt is used in version `2.0.0-alpha.6`, a **pre-release** (the 2.x line is not stable yet; the plugin id is
+> `dev.detekt`). It was chosen on purpose to get the new rule set and support for current Kotlin and AGP. Rules and
+> their names may still change before 2.0 is released, so bumping the version can bring new findings; the version is
+> set in `gradle/libs.versions.toml`.
 The unit tests run with `./gradlew testDebugUnitTest`; they are not part of the commit check.
 
 ### Git hooks
