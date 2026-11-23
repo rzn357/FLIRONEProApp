@@ -4,7 +4,12 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.exciteddev.flironepro.render.overlayTexts
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.launch
 
 /**
  * The part of the live screen that lives and dies with one activity: the views, the controllers that hold them and the wiring
@@ -15,9 +20,7 @@ import com.exciteddev.flironepro.render.overlayTexts
  * exposed for the developer self-test, which drives the whole screen; [SettingsPanel] and the controllers use only what
  * they are given.
  */
-internal class StreamScreen(val activity: AppCompatActivity, private val model: StreamViewModel) :
-    ThermalView.Listener,
-    StreamStatus.Screen {
+internal class StreamScreen(val activity: AppCompatActivity, private val model: StreamViewModel) : ThermalView.Listener {
 
     val settings = model.settings
     val pipeline = model.pipeline
@@ -53,6 +56,9 @@ internal class StreamScreen(val activity: AppCompatActivity, private val model: 
     private val ui = Handler(Looper.getMainLooper())
     private val saveSettingsRunnable = Runnable { settings.save() }
 
+    /** Shows what the stream says (see [StreamStatus]) for as long as this screen lives. */
+    private var listening: Job? = null
+
     private val ticker = object : Runnable {
         override fun run() {
             hud.updateTopBar()
@@ -77,12 +83,12 @@ internal class StreamScreen(val activity: AppCompatActivity, private val model: 
         recording.refreshUi()
         hud.updateTopBar()
         pipeline.attach(views.thermalView, texts)
-        model.status.attach(this)
+        listening = activity.lifecycleScope.launch { listenToStatus() }
     }
 
     /** The activity is going away: the stream must not keep a reference to its views. */
     fun release() {
-        model.status.detach(this)
+        listening?.cancel()
         pipeline.detach(views.thermalView)
         ui.removeCallbacksAndMessages(null)
         recording.release()
@@ -103,9 +109,11 @@ internal class StreamScreen(val activity: AppCompatActivity, private val model: 
         views.thermalView.postInvalidateOnAnimation()
     }
 
-    override fun onMessage(resId: Int) = activity.runOnUiThread { hud.showMessage(resId) }
-
-    override fun onNotice(notice: Notice) = activity.runOnUiThread { recording.show(notice) }
+    /** Runs on the main thread: it starts with the current message and with the notices that waited for a screen. */
+    private suspend fun listenToStatus() = coroutineScope {
+        launch { model.status.message.filterNotNull().collect { hud.showMessage(it) } }
+        launch { model.status.notices.collect { recording.show(it) } }
+    }
 
     override fun onCrosshairMoved(u: Float, v: Float) {
         ui.removeCallbacks(saveSettingsRunnable)

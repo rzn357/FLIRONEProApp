@@ -1,74 +1,63 @@
 package com.exciteddev.flironepro.ui
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class StreamStatusTest {
-    private class Recorder : StreamStatus.Screen {
-        val messages = ArrayList<Int>()
-        val notices = ArrayList<Notice>()
-
-        override fun onMessage(resId: Int) {
-            messages.add(resId)
-        }
-
-        override fun onNotice(notice: Notice) {
-            notices.add(notice)
-        }
-    }
-
     @Test
-    fun noticesWaitForTheNextScreen() {
+    fun noticesWaitForTheNextScreen() = runTest {
         val status = StreamStatus()
         status.notify(Notice.PhotoSaved("a.jpg"))
         status.notify(Notice.VideoSaved(null))
-        val screen = Recorder()
-        status.attach(screen)
-        assertEquals(listOf(Notice.PhotoSaved("a.jpg"), Notice.VideoSaved(null)), screen.notices)
-        status.attach(Recorder())
-        assertEquals(2, screen.notices.size) // delivered once, not again
+        assertEquals(listOf(Notice.PhotoSaved("a.jpg"), Notice.VideoSaved(null)), status.notices.take(2).toList())
+        assertNull(withTimeoutOrNull(1) { status.notices.first() }) // delivered once, not again
     }
 
     @Test
-    fun attachedScreenGetsNoticesAndMessagesDirectly() {
+    fun collectingScreenGetsNoticesAndMessagesDirectly() = runTest {
         val status = StreamStatus()
-        val screen = Recorder()
-        status.attach(screen)
+        val messages = ArrayList<Int?>()
+        val notices = ArrayList<Notice>()
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val readMessages = launch(dispatcher) { status.message.collect { messages.add(it) } }
+        val readNotices = launch(dispatcher) { status.notices.collect { notices.add(it) } }
         status.say(7)
         status.notify(Notice.PhotoSaved("b.jpg"))
-        assertEquals(listOf(7), screen.messages)
-        assertEquals(listOf<Notice>(Notice.PhotoSaved("b.jpg")), screen.notices)
+        assertEquals(listOf(null, 7), messages)
+        assertEquals(listOf<Notice>(Notice.PhotoSaved("b.jpg")), notices)
+        readMessages.cancel()
+        readNotices.cancel()
     }
 
     @Test
-    fun newScreenSeesTheLastMessage() {
+    fun newScreenSeesTheLastMessage() = runTest {
         val status = StreamStatus()
-        assertNull(status.message)
+        assertNull(status.message.value)
         status.say(1)
         status.say(2)
-        val screen = Recorder()
-        status.attach(screen)
-        assertEquals(2, status.message)
-        assertEquals(listOf(2), screen.messages)
+        assertEquals(2, status.message.value)
+        assertEquals(2, status.message.first())
     }
 
     @Test
-    fun detachedScreenGetsNothingAndAnOldScreenCannotDetachANewOne() {
+    fun noticeMissedByAGoneScreenIsDeliveredToTheNextOne() = runTest {
         val status = StreamStatus()
-        val old = Recorder()
-        val fresh = Recorder()
-        status.attach(old)
-        status.attach(fresh)
-        status.detach(old) // late call of the destroyed screen: the new one stays attached
+        val old = ArrayList<Notice>()
+        val readOld = launch(UnconfinedTestDispatcher(testScheduler)) { status.notices.collect { old.add(it) } }
         status.notify(Notice.VideoSaved("c.mp4"))
-        assertEquals(0, old.notices.size)
-        assertEquals(1, fresh.notices.size)
-        status.detach(fresh)
+        readOld.cancel() // the screen is destroyed
         status.notify(Notice.VideoSaved("d.mp4"))
-        assertEquals(1, fresh.notices.size)
-        val next = Recorder()
-        status.attach(next)
-        assertEquals(listOf<Notice>(Notice.VideoSaved("d.mp4")), next.notices)
+        assertEquals(listOf<Notice>(Notice.VideoSaved("c.mp4")), old)
+        assertEquals(Notice.VideoSaved("d.mp4"), status.notices.first())
     }
 }
