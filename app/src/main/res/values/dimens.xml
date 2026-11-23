@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Settings screen: the column, its title bar and the list -->
+    <dimen name="settings_column_max_width">560dp</dimen>
+    <dimen name="settings_title_bar_padding_start">20dp</dimen>
+    <dimen name="settings_title_bar_padding_top">8dp</dimen>
+    <dimen name="settings_title_bar_padding_end">8dp</dimen>
+    <dimen name="settings_title_bar_padding_bottom">4dp</dimen>
+    <dimen name="settings_close_size">48dp</dimen>
+    <dimen name="settings_close_padding">10dp</dimen>
+    <dimen name="settings_list_padding_horizontal">20dp</dimen>
+    <dimen name="settings_list_padding_top">2dp</dimen>
+    <dimen name="settings_list_padding_bottom">28dp</dimen>
+
+    <!-- Section headers: the first one has less room above it and no divider -->
+    <dimen name="settings_header_gap">30dp</dimen>
+    <dimen name="settings_header_padding_bottom">2dp</dimen>
+    <dimen name="settings_header_first_gap">8dp</dimen>
+    <dimen name="settings_header_first_padding_bottom">6dp</dimen>
+    <dimen name="settings_divider_margin_bottom">1dp</dimen>
+    <!-- A hairline: exactly one physical pixel, whatever the screen density -->
+    <dimen name="settings_divider_height" tools:ignore="PxUsage">1px</dimen>
+
+    <!-- Text -->
+    <dimen name="settings_text_size_title">22sp</dimen>
+    <dimen name="settings_text_size_header">12sp</dimen>
+    <dimen name="settings_text_size_row">15sp</dimen>
+    <dimen name="settings_shadow_radius">3dp</dimen>
+    <dimen name="settings_shadow_offset_y">1dp</dimen>
+
+    <!-- Rows -->
+    <dimen name="settings_radio_min_height">40dp</dimen>
+    <dimen name="settings_row_min_height">44dp</dimen>
+
+    <!-- The palette's color strip next to its radio button -->
+    <dimen name="swatch_width">72dp</dimen>
+    <dimen name="swatch_height">14dp</dimen>
+    <dimen name="swatch_margin_start">8dp</dimen>
+    <dimen name="swatch_corner_radius">4dp</dimen>
+    <dimen name="swatch_stroke_width">1dp</dimen>
+</resources>

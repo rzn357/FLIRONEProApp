@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Radio buttons and switch thumbs: amber when on, grey when off -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/accent_amber" android:state_checked="true" />
+    <item android:color="@color/text_secondary_on_dark" />
+</selector>

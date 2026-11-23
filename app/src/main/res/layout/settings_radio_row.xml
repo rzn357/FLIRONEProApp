@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One radio option. A row (not the bare button) so it can also hold an extra view, e.g. a palette's color strip. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <!-- The framework class on purpose: the unqualified name would become a Material radio button with different metrics. -->
+    <android.widget.RadioButton
+        android:id="@+id/settingsRadio"
+        style="@style/Widget.FLIRONEProApp.SettingsText.Radio"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1" />
+</LinearLayout>

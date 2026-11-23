@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The first section header of the list: less room above it and no divider under it. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/settingsHeaderText"
+    style="@style/Widget.FLIRONEProApp.SettingsText.Header"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingTop="@dimen/settings_header_first_gap"
+    android:paddingBottom="@dimen/settings_header_first_padding_bottom" />

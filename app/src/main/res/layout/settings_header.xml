@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A section header with a generous gap above it (to separate sections) and a thin divider below. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/settingsHeaderText"
+        style="@style/Widget.FLIRONEProApp.SettingsText.Header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="@dimen/settings_header_gap"
+        android:paddingBottom="@dimen/settings_header_padding_bottom" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/settings_divider_height"
+        android:layout_marginBottom="@dimen/settings_divider_margin_bottom"
+        android:background="@color/divider_light" />
+</LinearLayout>

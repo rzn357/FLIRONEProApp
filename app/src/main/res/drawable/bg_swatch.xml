@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A rounded strip with a thin light outline. The gradient colors are placeholders: the code sets the palette's own. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="@dimen/swatch_corner_radius" />
+    <stroke
+        android:width="@dimen/swatch_stroke_width"
+        android:color="@color/swatch_stroke" />
+    <gradient
+        android:angle="0"
+        android:endColor="@color/white"
+        android:startColor="@color/black" />
+</shape>

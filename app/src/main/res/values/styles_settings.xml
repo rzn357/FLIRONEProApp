@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Text on the settings screen: white with a soft shadow. Only the shadow's color is here: its radius and offset are
+        plain numbers in a style (they cannot be given in dp), so they are applied in code, see settingsShadow().
+    -->
+    <style name="Widget.FLIRONEProApp.SettingsText" parent="">
+        <item name="android:textColor">@color/text_primary_on_dark</item>
+        <item name="android:textSize">@dimen/settings_text_size_row</item>
+        <item name="android:shadowColor">@color/settings_text_shadow</item>
+    </style>
+
+    <style name="Widget.FLIRONEProApp.SettingsText.Title">
+        <item name="android:textSize">@dimen/settings_text_size_title</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.FLIRONEProApp.SettingsText.Header">
+        <item name="android:textColor">@color/accent_amber</item>
+        <item name="android:textSize">@dimen/settings_text_size_header</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.08</item>
+    </style>
+
+    <style name="Widget.FLIRONEProApp.SettingsText.Radio">
+        <item name="android:minHeight">@dimen/settings_radio_min_height</item>
+        <item name="android:buttonTint">@color/settings_control_tint</item>
+    </style>
+
+    <style name="Widget.FLIRONEProApp.SettingsText.Switch">
+        <item name="android:minHeight">@dimen/settings_row_min_height</item>
+        <item name="thumbTint">@color/settings_control_tint</item>
+        <item name="trackTint">@color/settings_switch_track</item>
+    </style>
+
+    <!-- A row that does something when tapped. -->
+    <style name="Widget.FLIRONEProApp.SettingsText.Action">
+        <item name="android:minHeight">@dimen/settings_row_min_height</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+    </style>
+</resources>

@@ -19,4 +19,10 @@
     <color name="text_primary_on_dark">#FFFFFFFF</color>
     <color name="text_secondary_on_dark">#B3FFFFFF</color>
     <color name="dialog_surface">#FF1E2126</color>
+
+    <!-- Settings screen: a soft dark shadow keeps text readable over the bright picture behind the translucent background -->
+    <color name="settings_text_shadow">#E6000000</color>
+    <color name="settings_switch_track_on">#66FFB74D</color>
+    <color name="settings_switch_track_off">#44FFFFFF</color>
+    <color name="swatch_stroke">#66FFFFFF</color>
 </resources>
