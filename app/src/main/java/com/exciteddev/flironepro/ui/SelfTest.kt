@@ -9,7 +9,7 @@ import com.exciteddev.flironepro.render.Palette
  * snapshots (portrait and landscape, every mode, settings panel, tool cards, fill mode), exercises calibration, video
  * recording and touch mapping, and writes the results to files/snapshots and the log (lines starting with "SELFTEST").
  */
-internal class SelfTest(private val a: StreamActivity, private val lang: String?) {
+internal class SelfTest(private val a: StreamScreen, private val lang: String?) {
 
     /** Prefix of the snapshot file names; a run in a specific language only takes the UI snapshots. */
     private val kit = SelfTestKit(a, if (lang != null) "${lang}_" else "")
@@ -41,7 +41,7 @@ internal class SelfTest(private val a: StreamActivity, private val lang: String?
                 SelfTestChecks(a, kit).runAll()
                 DiagLog.log("SELFTEST: finished")
             }
-            a.runOnUiThread { a.finish() }
+            a.activity.runOnUiThread { a.activity.finish() }
         } catch (e: Exception) {
             DiagLog.log("SELFTEST: error $e")
         }

@@ -12,13 +12,13 @@ import java.io.FileOutputStream
 import java.util.concurrent.CountDownLatch
 
 /** The tools of the self-test: running on the UI thread, rendering the screen into PNG files, and touching views. */
-internal class SelfTestKit(private val a: StreamActivity, private val prefix: String) {
-    val dir: File get() = File(a.filesDir, "snapshots")
+internal class SelfTestKit(private val a: StreamScreen, private val prefix: String) {
+    val dir: File get() = File(a.activity.filesDir, "snapshots")
 
     /** Runs [block] on the UI thread and waits until it is done. */
     fun onUiAndWait(block: () -> Unit) {
         val latch = CountDownLatch(1)
-        a.runOnUiThread {
+        a.activity.runOnUiThread {
             try {
                 block()
             } finally {

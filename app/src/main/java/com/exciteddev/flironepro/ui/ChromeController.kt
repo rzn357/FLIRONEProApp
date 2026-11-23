@@ -23,6 +23,7 @@ class ChromeController(
 
     /** Connects the settings button and the back button. */
     fun bind() {
+        settingsPanel.onShownChanged = ::onSettingsVisibility
         activity.findViewById<ImageButton>(R.id.btnSettings).setOnClickListener {
             cards.hide()
             settingsPanel.toggle()

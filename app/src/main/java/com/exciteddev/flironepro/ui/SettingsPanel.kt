@@ -9,8 +9,10 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.exciteddev.flironepro.R
+import com.exciteddev.flironepro.settings.AppSettings
 import com.exciteddev.flironepro.util.dp
 
 /**
@@ -19,12 +21,21 @@ import com.exciteddev.flironepro.util.dp
  * its own close icon. It contains only settings. In landscape the list is limited to a comfortable column width.
  * The rows themselves are in [SettingsSections], built from the pieces of [SettingsWidgets].
  */
-class SettingsPanel(private val a: StreamActivity, private val host: FrameLayout) {
+class SettingsPanel(
+    private val a: AppCompatActivity,
+    private val host: FrameLayout,
+    private val geometry: ScreenGeometry,
+    settings: AppSettings,
+    actions: SettingsActions
+) {
+    /** Called when the screen opens or closes (the bars and the overlays under it must give way). */
+    var onShownChanged: (Boolean) -> Unit = {}
+
     private val root = LinearLayout(a)
     private val scroll = ScrollView(a)
     private val content = LinearLayout(a)
     private val widgets = SettingsWidgets(a, content, ::hide)
-    private val sections = SettingsSections(a, widgets, ::hide, ::rebuild)
+    private val sections = SettingsSections(a, settings, widgets, actions, ::hide, ::rebuild)
 
     val isShown: Boolean get() = host.visibility == View.VISIBLE
 
@@ -66,9 +77,9 @@ class SettingsPanel(private val a: StreamActivity, private val host: FrameLayout
     fun toggle() = if (isShown) hide() else show()
 
     fun show() {
-        val (w, h) = a.geometry.viewSize()
+        val (w, h) = geometry.viewSize()
         val landscape = w > h
-        val i = a.geometry.contentInsets
+        val i = geometry.contentInsets
         root.setPadding(i.left, i.top, i.right, i.bottom)
         // In landscape the list is a centered column, so the lines are not stretched across the whole screen.
         root.layoutParams = FrameLayout.LayoutParams(
@@ -79,12 +90,12 @@ class SettingsPanel(private val a: StreamActivity, private val host: FrameLayout
         scroll.scrollTo(0, 0)
         rebuild()
         host.visibility = View.VISIBLE
-        a.chrome.onSettingsVisibility(true)
+        onShownChanged(true)
     }
 
     fun hide() {
         host.visibility = View.GONE
-        a.chrome.onSettingsVisibility(false)
+        onShownChanged(false)
     }
 
     fun rebuild() {

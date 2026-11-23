@@ -9,27 +9,26 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Handler
 import android.os.Looper
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import com.exciteddev.flironepro.R
 import com.exciteddev.flironepro.debug.DemoSource
 import com.exciteddev.flironepro.debug.DiagLog
 import com.exciteddev.flironepro.pipeline.StreamPipeline
+import com.exciteddev.flironepro.pipeline.stopRecording
 import com.exciteddev.flironepro.usb.UsbReport
 
 /**
  * Starting and stopping the stream: finds the camera, asks for the USB permission, reacts to the camera being unplugged, and
- * stops everything that belongs to a running stream (the camera or demo, the recording, a calibration search).
+ * stops everything that belongs to a running stream (the camera or demo and the recording). It belongs to no screen (it works
+ * with the application context) and tells the user what happens through the [StreamStatus].
  */
 class StreamSession(
-    private val activity: AppCompatActivity,
+    private val context: Context,
     private val usbManager: UsbManager,
     private val pipeline: StreamPipeline,
-    private val hud: HudController,
-    private val recording: RecordingController,
-    private val ffc: FfcController,
-    private val runMode: RunMode
+    private val runMode: RunMode,
+    private val status: StreamStatus
 ) {
     private val ui = Handler(Looper.getMainLooper())
     private var permissionAsked = false
@@ -40,7 +39,7 @@ class StreamSession(
                 ACTION_PERMISSION -> {
                     val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
                     DiagLog.log("Permission (live view): ${if (granted) "granted" else "denied"}")
-                    if (granted) startCamera() else hud.showMessage(R.string.msg_permission_denied)
+                    if (granted) startCamera() else status.say(R.string.msg_permission_denied)
                 }
 
                 UsbManager.ACTION_USB_DEVICE_DETACHED -> {
@@ -48,7 +47,7 @@ class StreamSession(
                     if (device?.vendorId == UsbReport.FLIR_VENDOR_ID && !runMode.demo) {
                         DiagLog.log("Camera detached")
                         stop()
-                        hud.showMessage(R.string.msg_camera_disconnected)
+                        status.say(R.string.msg_camera_disconnected)
                     }
                 }
             }
@@ -59,7 +58,7 @@ class StreamSession(
         pipeline.onConnectionLost = {
             ui.post {
                 stop()
-                hud.showMessage(R.string.msg_connection_lost)
+                status.say(R.string.msg_connection_lost)
             }
         }
     }
@@ -70,11 +69,11 @@ class StreamSession(
             addAction(ACTION_PERMISSION)
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
         }
-        ContextCompat.registerReceiver(activity, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
     fun unregister() {
-        activity.unregisterReceiver(receiver)
+        context.unregisterReceiver(receiver)
     }
 
     private fun findCamera(): UsbDevice? = usbManager.deviceList.values.firstOrNull { it.vendorId == UsbReport.FLIR_VENDOR_ID }
@@ -83,22 +82,22 @@ class StreamSession(
     fun ensureStarted() {
         val device = findCamera()
         if (device == null) {
-            hud.showMessage(R.string.msg_no_camera)
+            status.say(R.string.msg_no_camera)
             return
         }
         if (usbManager.hasPermission(device)) {
             startCamera()
         } else {
             requestPermission(device)
-            hud.showMessage(R.string.msg_wait_permission)
+            status.say(R.string.msg_wait_permission)
         }
     }
 
     private fun requestPermission(device: UsbDevice) {
         if (permissionAsked) return
         permissionAsked = true
-        val intent = Intent(ACTION_PERMISSION).setPackage(activity.packageName)
-        val pending = PendingIntent.getBroadcast(activity, 0, intent, PendingIntent.FLAG_MUTABLE)
+        val intent = Intent(ACTION_PERMISSION).setPackage(context.packageName)
+        val pending = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_MUTABLE)
         DiagLog.log("Requesting permission for ${device.deviceName}")
         usbManager.requestPermission(device, pending)
     }
@@ -106,21 +105,20 @@ class StreamSession(
     fun startCamera() {
         val device = findCamera()
         if (pipeline.camera?.isRunning == true || device == null) return
-        if (pipeline.startCamera(usbManager, device)) hud.showMessage(R.string.msg_wait_first_frame)
+        if (pipeline.startCamera(usbManager, device)) status.say(R.string.msg_wait_first_frame)
     }
 
     fun startDemo() {
         // The self-test feeds frames faster (20/s) to check the performance headroom.
         val src = pipeline.startDemo(if (runMode.selfTest) SELF_TEST_FRAME_MS else DemoSource.FRAME_MS) ?: return
-        hud.showMessage(R.string.msg_demo_running)
+        status.say(R.string.msg_demo_running)
         ui.postDelayed({
-            if (pipeline.demoSource === src && src.frameCount == 0 && pipeline.frameCount == 0) hud.showMessage(R.string.msg_demo_no_frames)
+            if (pipeline.demoSource === src && src.frameCount == 0 && pipeline.frameCount == 0) status.say(R.string.msg_demo_no_frames)
         }, NO_DEMO_FRAMES_AFTER_MS)
     }
 
     fun stop() {
-        ffc.cancelSearch()
-        recording.stopRecording(wait = false)
+        pipeline.stopRecording()
         pipeline.stop()
     }
 

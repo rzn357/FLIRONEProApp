@@ -155,7 +155,8 @@ class FrameProcessor(
     private val decodeOpts = BitmapFactory.Options().apply { inSampleSize = 2 }
     private val decodeOptsFull = BitmapFactory.Options().apply { inSampleSize = 1 }
 
-    private val renderer = PictureRenderer(settings, texts)
+    /** Draws photos, video and snapshots; the screen changes its texts when the language changes. */
+    val renderer = PictureRenderer(settings, texts)
     private val luts = LutCache()
     private val saver = Executors.newSingleThreadExecutor()
 

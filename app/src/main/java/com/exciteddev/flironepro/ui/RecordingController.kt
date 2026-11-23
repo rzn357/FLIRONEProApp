@@ -8,6 +8,8 @@ import com.exciteddev.flironepro.R
 import com.exciteddev.flironepro.media.VideoRecorder
 import com.exciteddev.flironepro.pipeline.FrameStore
 import com.exciteddev.flironepro.pipeline.StreamPipeline
+import com.exciteddev.flironepro.pipeline.recorder
+import com.exciteddev.flironepro.pipeline.stopRecording
 import com.exciteddev.flironepro.render.Orientation
 import com.exciteddev.flironepro.settings.AppSettings
 import com.exciteddev.flironepro.util.toast
@@ -26,14 +28,8 @@ class RecordingController(
         load(MediaActionSound.STOP_VIDEO_RECORDING)
     }
 
-    var recorder: VideoRecorder? = null
-        private set
-
-    init {
-        pipeline.onPhotoSaved = { name ->
-            activity.runOnUiThread { activity.toast(savedOrFailed(name, R.string.toast_photo_saved_fmt, R.string.toast_photo_failed)) }
-        }
-    }
+    /** The recording lives in the pipeline, so it goes on when the screen is recreated and a new controller finds it. */
+    private val recorder: VideoRecorder? get() = pipeline.recorder
 
     /** Connects the photo and the video button. */
     fun bind() {
@@ -52,7 +48,7 @@ class RecordingController(
     }
 
     fun toggleRecording() {
-        if (recorder != null) stopRecording(wait = false) else startRecording()
+        if (recorder != null) stopRecording() else startRecording()
     }
 
     private fun startRecording() {
@@ -68,23 +64,29 @@ class RecordingController(
             return
         }
         sound.play(MediaActionSound.START_VIDEO_RECORDING)
-        recorder = rec
         processor.recorder = rec
         refreshUi()
     }
 
-    /** Ends the recording; [wait] = finish the file right here instead of on a background thread. */
-    fun stopRecording(wait: Boolean) {
-        val rec = recorder ?: return
-        recorder = null
-        pipeline.processor?.recorder = null
-        sound.play(MediaActionSound.STOP_VIDEO_RECORDING)
-        val finish = {
-            val name = rec.stop()
-            activity.runOnUiThread { activity.toast(savedOrFailed(name, R.string.toast_video_saved_fmt, R.string.toast_video_failed)) }
+    /** Ends the recording; the file is finished in the background and the user is told when it is (see [show]). */
+    private fun stopRecording() {
+        if (pipeline.stopRecording()) {
+            sound.play(MediaActionSound.STOP_VIDEO_RECORDING)
+            refreshUi()
         }
-        if (wait) finish() else Thread(finish, "flir-rec-stop").start()
-        refreshUi()
+    }
+
+    /** Tells the user that a photo or a video was saved, whoever ended it (the button, the unplugged camera, the screen). */
+    fun show(notice: Notice) {
+        when (notice) {
+            is Notice.PhotoSaved ->
+                activity.toast(savedOrFailed(notice.name, R.string.toast_photo_saved_fmt, R.string.toast_photo_failed))
+
+            is Notice.VideoSaved -> {
+                activity.toast(savedOrFailed(notice.name, R.string.toast_video_saved_fmt, R.string.toast_video_failed))
+                refreshUi()
+            }
+        }
     }
 
     /** The video button turns red with a stop icon and a timer while recording. */

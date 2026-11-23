@@ -10,6 +10,7 @@ import com.exciteddev.flironepro.protocol.BatteryState
 import com.exciteddev.flironepro.protocol.FlirFrame
 import com.exciteddev.flironepro.protocol.ServiceMessages
 import com.exciteddev.flironepro.radiometry.Radiometry
+import com.exciteddev.flironepro.render.UiTexts
 import com.exciteddev.flironepro.render.overlayTexts
 import com.exciteddev.flironepro.settings.AppSettings
 import com.exciteddev.flironepro.usb.FlirCamera
@@ -18,12 +19,17 @@ import com.exciteddev.flironepro.usb.FlirCamera
  * The data side of the live screen: the camera (or the demo player), the frame processor, the radiometric model and the
  * statistics log, wired together for one session. A new session starts on every (re)start of the camera or the demo.
  * It receives the camera's frames and messages (see [FlirCamera.Listener]) on the camera's threads.
+ *
+ * It does not belong to a screen: the screen's picture view is [attach]ed to it for as long as the screen exists, and the
+ * pipeline goes on (without showing anything) while there is none, e.g. while the screen is being recreated.
  */
-class StreamPipeline(private val context: Context, private val settings: AppSettings, private val thermalView: PictureSink) :
-    FlirCamera.Listener {
+class StreamPipeline(private val context: Context, private val settings: AppSettings) : FlirCamera.Listener {
 
     /** Called (on the processing thread) when a photo was saved: the file name, or null if saving failed. */
     var onPhotoSaved: (String?) -> Unit = {}
+
+    /** Called (on a background thread) when a video was finished: the file name, or null if saving failed. */
+    var onVideoSaved: (String?) -> Unit = {}
 
     /** Called (on the camera's thread) when the connection to the camera is lost. */
     var onConnectionLost: () -> Unit = {}
@@ -52,8 +58,22 @@ class StreamPipeline(private val context: Context, private val settings: AppSett
         private set
 
     private var statsLog: FrameStatsLog? = null
+    private val sink = DetachableSink()
+
+    /** The texts of the overlays in the language of the attached screen. */
+    @Volatile private var texts: UiTexts = context.overlayTexts()
 
     val frameCount: Int get() = intake?.frameCount ?: 0
+
+    /** Shows the pictures in [picture], with the overlay [overlayTexts] (they change with the language of the screen). */
+    fun attach(picture: PictureSink, overlayTexts: UiTexts) {
+        texts = overlayTexts
+        processor?.renderer?.texts = overlayTexts
+        sink.attach(picture)
+    }
+
+    /** Stops showing the pictures in [picture] (the screen is gone); the stream itself goes on. */
+    fun detach(picture: PictureSink) = sink.detach(picture)
 
     /** Starts reading the camera; false if it could not be started. */
     fun startCamera(manager: UsbManager, device: UsbDevice): Boolean {
@@ -92,7 +112,7 @@ class StreamPipeline(private val context: Context, private val settings: AppSett
         processor?.shutdown()
         processor = null
         // The render thread is gone, so nothing can bring the last picture back: show the empty state (with its message) again.
-        thermalView.clear()
+        sink.clear()
         intake = null
         statsLog?.close()
         statsLog = null
@@ -112,8 +132,8 @@ class StreamPipeline(private val context: Context, private val settings: AppSett
                 DiagLog.log("Using the shutter calibration of the previous session until a new one arrives")
             }
         }
-        thermalView.clear()
-        val newProcessor = FrameProcessor(context.applicationContext, settings, radiometry, thermalView, context.overlayTexts())
+        sink.clear()
+        val newProcessor = FrameProcessor(context.applicationContext, settings, radiometry, sink, texts)
         newProcessor.onPhotoSaved = { name -> onPhotoSaved(name) }
         newProcessor.start()
         processor = newProcessor

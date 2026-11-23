@@ -97,7 +97,8 @@ flowchart LR
 | `FrameIntake`, `FfcTracker` | Cheap per-frame work on the camera thread: decoding, following the camera's shutter calibration, skipping frames whose thermal content is invalid. |
 | `Radiometry`, `TempCalibration` | The temperature model: raw sensor counts to °C, with emissivity and reflected-temperature correction and the user's calibration. No Android dependency, covered by unit tests. |
 | `FrameProcessor`, `ImageComposer`, `PictureRenderer` | The render thread (only the newest frame is kept): colorizing, smooth enlargement, MSX, overlays. The same code draws the screen, photos and video, so marks always match the picture. |
-| `StreamActivity` and the controllers | The screen: `StreamSession` (start/stop, USB permission), `ChromeController`, `HudController`, `RecordingController`, `SettingsPanel`, `ToolCards`. |
+| `StreamViewModel`, `StreamSession` | What outlives the screen: the settings, the `StreamPipeline`, starting and stopping the stream (camera search, USB permission, unplugging). The camera does not restart when the activity is recreated, e.g. by a change of language. They tell the user what happens through `StreamStatus`, never through a view. |
+| `StreamActivity`, `StreamScreen` and the controllers | What lives and dies with one activity: `StreamScreen` builds the views and the controllers (`ChromeController`, `HudController`, `RecordingController`, `SettingsPanel`, `ToolCards`) from the view model; the activity only forwards its lifecycle. The controllers get what they need through their constructors (the settings rows act through `SettingsActions`). |
 
 ### Packages
 
@@ -108,13 +109,13 @@ The code is in `app/src/main/java/com/exciteddev/flironepro/`, split by layer (t
 | `usb` | The camera over USB: `FlirCamera`, `FlirUsb`, `FlirReaders`, `ServiceChannel`, descriptor parsing and the USB report. |
 | `protocol` | The wire format with no USB or Android dependency: frame and message parsers, commands, telemetry packets. |
 | `radiometry` | The temperature model: `Radiometry`, `TempCalibration`, `ShutterCalibration`, `FfcTracker`, `ThermalImage`. |
-| `pipeline` | Frames from the camera to the picture: `StreamPipeline`, `FrameIntake`, `FrameStore`, `FrameProcessor`, `PictureRenderer`. It hands the finished picture to a `PictureSink` and knows nothing about the screen. |
+| `pipeline` | Frames from the camera to the picture: `StreamPipeline`, `FrameIntake`, `FrameStore`, `FrameProcessor`, `PictureRenderer`. It hands the finished picture to a `PictureSink` (the screen's view is attached to it through a `DetachableSink` for as long as the screen exists) and knows nothing about the screen. |
 | `render` | Drawing: `ImageComposer`, `OverlayPainter`, `Palettes`, `ViewTransform`, the overlay texts. |
 | `media` | Saving photos and recording video. |
 | `settings` | `AppSettings`, the user's choices that persist between launches. |
 | `util` | Small `Context` helpers: dp to pixels, the app language, toasts. |
 | `debug` | The diagnostic log, the frame statistics and the demo replay. |
-| `ui` | Everything on the screen: activities, the controllers, `ThermalView` (the `PictureSink`), the settings panel, the cards, and the developer tools that drive the screen (the adb run plan and the self-test). |
+| `ui` | Everything on the screen: activities, the controllers, `StreamViewModel` and `StreamScreen`, `ThermalView` (the `PictureSink`), the settings panel, the cards, and the developer tools that drive the screen (the adb run plan and the self-test). |
 
 ### How it works, in short
 

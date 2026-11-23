@@ -40,10 +40,6 @@ class FfcController(
 
     private val idle: Boolean get() = !runMode.demo && !searchRunning
 
-    fun cancelSearch() {
-        searchCancelled = true
-    }
-
     /** Called from the settings: calibrates now (searching for the command first if it is not known yet). */
     fun request() {
         val cam = connectedCamera

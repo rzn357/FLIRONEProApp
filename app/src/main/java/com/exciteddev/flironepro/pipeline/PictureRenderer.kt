@@ -15,9 +15,16 @@ import com.exciteddev.flironepro.settings.AppSettings
  * Draws the composed picture with its overlays on a canvas of any size: for photos, videos and snapshots, which always show the
  * whole frame. It uses the same [ViewTransform] as the screen, so the marks sit exactly where they are on the screen.
  */
-class PictureRenderer(private val settings: AppSettings, private val texts: UiTexts) {
+class PictureRenderer(private val settings: AppSettings, texts: UiTexts) {
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val painters = HashMap<Int, OverlayPainter>()
+
+    /** The overlay texts; the language can change while the renderer lives, the painters are made again then. */
+    @Volatile var texts: UiTexts = texts
+        set(value) {
+            field = value
+            synchronized(painters) { painters.clear() }
+        }
 
     /** Draws on [canvas] of size w x h. Can be called from several threads. */
     fun draw(canvas: Canvas, w: Int, h: Int, content: Bitmap, overlay: OverlayState) {

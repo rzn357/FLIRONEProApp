@@ -13,7 +13,7 @@ import java.io.File
 import java.io.FileOutputStream
 
 /** The self-test steps that are not screenshots: performance, calibration, photo and video, touch mapping. */
-internal class SelfTestChecks(private val a: StreamActivity, private val kit: SelfTestKit) {
+internal class SelfTestChecks(private val a: StreamScreen, private val kit: SelfTestKit) {
 
     fun runAll() {
         performance()
@@ -57,7 +57,7 @@ internal class SelfTestChecks(private val a: StreamActivity, private val kit: Se
             val bm = processor?.renderSnapshot(960, 720)
             if (bm != null) FileOutputStream(File(kit.dir, "photo.png")).use { bm.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
-        val rec = VideoRecorder(a.applicationContext, 640, 480, File(kit.dir, "test.mp4"))
+        val rec = VideoRecorder(a.activity.applicationContext, 640, 480, File(kit.dir, "test.mp4"))
         if (rec.start()) {
             processor?.recorder = rec
             Thread.sleep(2500)

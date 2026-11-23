@@ -1,6 +1,7 @@
 package com.exciteddev.flironepro.ui
 
 import android.content.Intent
+import androidx.appcompat.app.AppCompatActivity
 import com.exciteddev.flironepro.R
 import com.exciteddev.flironepro.render.DisplayMode
 import com.exciteddev.flironepro.render.Orientation
@@ -15,13 +16,13 @@ import com.exciteddev.flironepro.util.setAppLanguage
  * dialog or a card over the picture), [rebuild] draws the list again (for the rows that change what the list shows).
  */
 class SettingsSections(
-    private val a: StreamActivity,
+    private val a: AppCompatActivity,
+    private val s: AppSettings,
     private val w: SettingsWidgets,
+    private val actions: SettingsActions,
     private val hide: () -> Unit,
     private val rebuild: () -> Unit
 ) {
-    private val s: AppSettings get() = a.settings
-
     fun build() {
         displaySection()
         paletteSection()
@@ -36,7 +37,7 @@ class SettingsSections(
     /** Saves the settings and lets the screen react to them. */
     private fun changed() {
         s.save()
-        a.onSettingsChanged()
+        actions.onChanged()
     }
 
     private fun displaySection() {
@@ -65,13 +66,13 @@ class SettingsSections(
     private fun temperatureSection() {
         w.header(R.string.sec_temperature)
         w.actionThenHide(a.getString(R.string.row_emissivity_fmt, String.format(a.appLocale(), "%.2f", s.emissivity))) {
-            a.dialogs.openEmissivity()
+            actions.openEmissivity()
         }
         w.actionThenHide(a.getString(R.string.row_reflected_fmt, String.format(a.appLocale(), "%.0f", s.reflectedC))) {
-            a.dialogs.openReflected()
+            actions.openReflected()
         }
-        w.actionThenHide(a.getString(R.string.row_calibration)) { a.cards.openCalibration() }
-        w.actionThenHide(a.getString(R.string.row_ffc)) { a.ffc.request() }
+        w.actionThenHide(a.getString(R.string.row_calibration)) { actions.openCalibration() }
+        w.actionThenHide(a.getString(R.string.row_ffc)) { actions.requestFfc() }
     }
 
     private fun msxSection() {
@@ -87,7 +88,7 @@ class SettingsSections(
             s.msxLevel = it
             changed()
         }
-        w.actionThenHide(a.getString(R.string.row_msx_alignment)) { a.cards.openAlignment() }
+        w.actionThenHide(a.getString(R.string.row_msx_alignment)) { actions.openAlignment() }
     }
 
     private fun imageSection() {
@@ -112,7 +113,7 @@ class SettingsSections(
         w.switch(R.string.sw_hide_controls, false) {
             if (it) {
                 hide()
-                a.chrome.setControlsHidden(true)
+                actions.hideControls()
             }
         }
     }
@@ -144,7 +145,7 @@ class SettingsSections(
         w.header(R.string.sec_developer)
         w.actionThenHide(a.getString(R.string.row_usb_diag)) { a.startActivity(Intent(a, DiagnosticsActivity::class.java)) }
         w.action(a.getString(R.string.row_save_raw)) {
-            a.recording.saveRawFrame()
+            actions.saveRawFrame()
             rebuild()
         }
     }

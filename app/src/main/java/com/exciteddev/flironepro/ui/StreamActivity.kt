@@ -1,20 +1,13 @@
 package com.exciteddev.flironepro.ui
 
-import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
-import android.hardware.usb.UsbManager
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.view.View
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.ViewModelProvider
 import com.exciteddev.flironepro.R
 import com.exciteddev.flironepro.debug.DiagLog
-import com.exciteddev.flironepro.pipeline.StreamPipeline
-import com.exciteddev.flironepro.render.overlayTexts
-import com.exciteddev.flironepro.settings.AppSettings
 
 /**
  * Main screen: the live picture with three display modes (thermal / visible / MSX), a draggable crosshair with its
@@ -22,141 +15,79 @@ import com.exciteddev.flironepro.settings.AppSettings
  * calibration. The only controls on top of the picture are the settings gear, the battery and the frame rate (top) and
  * the photo / video buttons (bottom).
  *
- * The activity itself only wires the parts together and forwards the lifecycle to them: the data side is the [StreamPipeline],
- * starting and stopping is the [StreamSession], and every kind of control has a class of its own.
+ * The activity holds no state of its own. The stream, the settings and the way the stream starts and stops are in the
+ * [StreamViewModel], which survives the activity being created again; the views and the controllers are the [StreamScreen],
+ * built here. What is left for the activity is the lifecycle: it starts and stops the stream and forwards the rest.
+ *
+ * The manifest keeps the activity from being recreated on rotation (the picture just turns), but anything else that recreates
+ * it (a change of language, for example) no longer touches the camera.
  */
-class StreamActivity :
-    AppCompatActivity(),
-    ThermalView.Listener {
+class StreamActivity : AppCompatActivity() {
 
-    internal lateinit var settings: AppSettings
-    internal lateinit var views: StreamViews
-    internal lateinit var pipeline: StreamPipeline
-    internal lateinit var geometry: ScreenGeometry
-    internal lateinit var dialogs: ParameterDialogs
-    internal lateinit var cards: ToolCards
-    internal lateinit var recording: RecordingController
-    internal lateinit var ffc: FfcController
-    internal lateinit var hud: HudController
-    internal lateinit var settingsPanel: SettingsPanel
-    internal lateinit var chrome: ChromeController
-    private lateinit var session: StreamSession
+    private lateinit var model: StreamViewModel
+    private lateinit var screen: StreamScreen
     private lateinit var debugCommands: DebugCommands
-    private lateinit var runMode: RunMode
-
-    private val ui = Handler(Looper.getMainLooper())
-    private val saveSettingsRunnable = Runnable { settings.save() }
-
-    private val ticker = object : Runnable {
-        override fun run() {
-            hud.updateTopBar()
-            hud.updateHud()
-            ffc.ensureAutoTuning()
-            if (views.calCard.visibility == View.VISIBLE) cards.updateCalText()
-            ui.postDelayed(this, TICK_MS)
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         DiagLog.init(this)
         setContentView(R.layout.activity_stream)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        settings = AppSettings(this)
         val plan = DebugRun.plan(this, savedInstanceState, intent)
-        runMode = RunMode(plan.demo, plan.selfTest)
-
-        views = StreamViews(this)
-        views.thermalView.settings = settings
-        views.thermalView.texts = overlayTexts()
-        views.thermalView.listener = this
-        pipeline = StreamPipeline(this, settings, views.thermalView)
-        geometry = ScreenGeometry(this, views, settings)
-        dialogs = ParameterDialogs(this, settings, pipeline)
-        cards = ToolCards(this, views, settings, pipeline, dialogs)
-        recording = RecordingController(this, views, settings, pipeline)
-        ffc = FfcController(this, settings, pipeline, runMode)
-        settingsPanel = SettingsPanel(this, views.settingsHost)
-        hud = HudController(this, views, pipeline, recording, runMode) { settingsPanel.isShown || cards.isOpen }
-        chrome = ChromeController(this, views, cards, settingsPanel)
-        session = StreamSession(this, getSystemService(Context.USB_SERVICE) as UsbManager, pipeline, hud, recording, ffc, runMode)
-        debugCommands = DebugCommands(this, pipeline)
-
-        chrome.bind()
-        cards.bind()
-        recording.bind()
-        geometry.bindInsets()
-        session.register()
-
-        geometry.updateRotation()
-        recording.refreshUi()
-        hud.updateTopBar()
+        model = ViewModelProvider(this)[StreamViewModel::class.java]
+        model.applyRunPlan(plan.demo, plan.selfTest)
+        screen = StreamScreen(this, model)
+        debugCommands = DebugCommands(this, model.pipeline)
+        screen.bind()
 
         // Diagnostic self-test (started from adb in debug builds): runs in demo mode, independent of window visibility.
         if (plan.runSelfTest) {
-            runMode.demo = true
-            session.startDemo()
-            SelfTest(this, plan.language).start()
+            model.runMode.demo = true
+            model.session.startDemo()
+            SelfTest(screen, plan.language).start()
         }
         debugCommands.handle(intent)
     }
 
     override fun onStart() {
         super.onStart()
-        ui.post(ticker)
+        screen.startTicking()
+        val runMode = model.runMode
         when {
             runMode.selfTest -> Unit
-            runMode.demo -> session.startDemo()
-            else -> session.ensureStarted()
+            runMode.demo -> model.session.startDemo()
+            else -> model.session.ensureStarted()
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (!runMode.selfTest && !runMode.demo && pipeline.camera?.isRunning != true) session.ensureStarted()
+        val runMode = model.runMode
+        if (!runMode.selfTest && !runMode.demo && model.pipeline.camera?.isRunning != true) model.session.ensureStarted()
         debugCommands.handle(intent)
     }
 
     override fun onStop() {
-        ui.removeCallbacks(ticker)
-        if (!runMode.selfTest) session.stop()
+        screen.stopTicking()
+        // A screen that is only being created again (not left) leaves the stream running for the next one.
+        if (!model.runMode.selfTest && !isChangingConfigurations) model.session.stop()
         super.onStop()
     }
 
     override fun onDestroy() {
-        session.unregister()
-        if (runMode.selfTest) session.stop()
-        recording.release()
+        screen.release()
+        if (model.runMode.selfTest && !isChangingConfigurations) model.session.stop()
         super.onDestroy()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) chrome.hideSystemBars()
+        if (hasFocus) screen.chrome.hideSystemBars()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        geometry.updateRotation()
-    }
-
-    /** Called by the settings panel after any display-related setting changed. */
-    internal fun onSettingsChanged() {
-        geometry.updateRotation()
-        pipeline.applySettings()
-        views.thermalView.postInvalidateOnAnimation()
-    }
-
-    override fun onCrosshairMoved(u: Float, v: Float) {
-        ui.removeCallbacks(saveSettingsRunnable)
-        ui.postDelayed(saveSettingsRunnable, SAVE_DELAY_MS)
-    }
-
-    override fun onTap() = chrome.onTap()
-
-    companion object {
-        private const val TICK_MS = 300L
-        private const val SAVE_DELAY_MS = 800L
+        screen.geometry.updateRotation()
     }
 }
