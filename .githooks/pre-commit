@@ -1,0 +1,46 @@
+#!/bin/sh
+# Pre-commit hook: checks the code that is about to be committed with the linters (ktlint through Spotless, and detekt) and
+# cancels the commit if they find anything. Only the linters run here, not the tests.
+#
+# Only what is staged is checked: the staged version of every file is exported into a temporary folder and the linters run
+# there, so changes that are not staged (or files that are not added) do not matter. See "Git hooks" in README.md.
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# Nothing to check if the commit has no Kotlin code and no linter settings.
+if ! git diff --cached --name-only | grep -Eq '\.kts?$|^config/detekt/|^\.editorconfig$|^gradle/libs\.versions\.toml$'; then
+    echo "pre-commit: the commit has no Kotlin code or linter settings, the linters are skipped."
+    exit 0
+fi
+
+# Gradle cannot use a user profile with non-Latin letters in its path; use an ASCII-only Gradle home if one exists.
+if [ -z "$GRADLE_USER_HOME" ] && [ -d "C:/gradle-ascii" ]; then
+    export GRADLE_USER_HOME="C:/gradle-ascii"
+fi
+
+# The folder is inside .git, so it is never part of the project and can not end up in a commit.
+CHECK_DIR="$(git rev-parse --absolute-git-dir)/pre-commit-check"
+rm -rf "$CHECK_DIR"
+trap 'rm -rf "$CHECK_DIR"' EXIT
+mkdir -p "$CHECK_DIR" || exit 1
+
+# The staged version of all files (checkout-index reads the index, not the working folder).
+git checkout-index --all --force --prefix="$CHECK_DIR/" || exit 1
+# Local settings that are not in the repository, but Gradle needs (the Android SDK location).
+if [ -f local.properties ]; then
+    cp local.properties "$CHECK_DIR/"
+fi
+
+echo "pre-commit: checking the staged changes with ktlint (spotlessCheck) and detekt..."
+cd "$CHECK_DIR" || exit 1
+
+if ./gradlew spotlessCheck detekt --console=plain -q; then
+    echo "pre-commit: the linters found no problems."
+    exit 0
+fi
+
+echo ""
+echo "pre-commit: the commit was cancelled, because the linters found problems in the staged changes (see above)."
+echo "  - formatting problems: run './gradlew spotlessApply' in the project, then stage the changed files again"
+echo "  - detekt problems: fix the code and stage it again"
+exit 1
