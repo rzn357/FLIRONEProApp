@@ -1,0 +1,17 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{kt,kts}]
+# Used by ktlint (through Spotless). Android Studio's flavour of the official Kotlin style.
+ktlint_code_style = android_studio
+max_line_length = 140
+
+[*.{xml,toml,yml,yaml,json}]
+indent_size = 2

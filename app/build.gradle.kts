@@ -1,5 +1,14 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.detekt)
+}
+
+// Static analysis (code smells, complexity). `./gradlew detekt` reports.
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+    source.setFrom("src/main/java", "src/test/java")
+    parallel = true
 }
 
 android {

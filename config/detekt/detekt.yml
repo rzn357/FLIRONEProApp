@@ -1,0 +1,16 @@
+# Project overrides; everything else comes from detekt's default configuration (buildUponDefaultConfig = true).
+
+style:
+  MaxLineLength:
+    maxLineLength: 140
+    excludeCommentStatements: true
+  MagicNumber:
+    excludes: ['**/test/**', '**/androidTest/**']
+    ignoreNamedArgument: true
+    ignoreExtensionFunctions: true
+    ignorePropertyDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+
+naming:
+  FunctionNaming:
+    excludes: ['**/test/**', '**/androidTest/**']
