@@ -1,9 +1,8 @@
 package com.exciteddev.flironepro.ui
 
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.exciteddev.flironepro.R
 import com.exciteddev.flironepro.debug.DiagLog
 import com.exciteddev.flironepro.pipeline.FrameIntake
@@ -13,11 +12,20 @@ import com.exciteddev.flironepro.settings.AppSettings
 import com.exciteddev.flironepro.usb.FlirCamera
 import com.exciteddev.flironepro.util.toast
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The manual shutter calibration (see [ShutterCalibration]): asks the camera to close its shutter and recalibrate now. The
  * command is not publicly documented, so the first time the app searches for it; once found it is remembered and used directly.
  * Also makes sure that the camera's automatic calibration is on.
+ *
+ * The work runs in the activity's coroutine scope: when the screen goes away the search and the pending checks are cancelled
+ * with it (the search still switches the automatic calibration back on, see [ShutterCalibration.probe]), and nothing keeps a
+ * reference to the destroyed activity.
  */
 class FfcController(
     private val activity: AppCompatActivity,
@@ -25,11 +33,10 @@ class FfcController(
     private val pipeline: StreamPipeline,
     private val runMode: RunMode
 ) {
-    private val ui = Handler(Looper.getMainLooper())
+    /** The running search for the command, or null; cancelling it (the dialog's button, the screen) ends the search. */
+    private var search: Job? = null
 
-    @Volatile private var searchRunning = false
-
-    @Volatile private var searchCancelled = false
+    private val searchRunning: Boolean get() = search?.isActive == true
 
     /** The session in which the automatic calibration has been ensured (once per camera session). */
     private var ensuredFor: FrameIntake? = null
@@ -56,16 +63,17 @@ class FfcController(
 
     private fun requestKnownCommand(cam: FlirCamera, command: String) {
         val t0 = SystemClock.elapsedRealtime()
-        val sent = cam.sendJson(command)
-        DiagLog.log("[ffc] manual request $command -> $sent (camera state: ${pipeline.intake?.ffc?.lastState})")
-        activity.toast(activity.getString(R.string.ffc_requested))
-        ui.postDelayed({
+        activity.lifecycleScope.launch {
+            val sent = withContext(Dispatchers.IO) { cam.sendJson(command) }
+            DiagLog.log("[ffc] manual request $command -> $sent (camera state: ${pipeline.intake?.ffc?.lastState})")
+            activity.toast(activity.getString(R.string.ffc_requested))
+            delay(ShutterCalibration.RESPONSE_WINDOW_MS + REACTION_GRACE_MS)
             val lastActivity = pipeline.intake?.ffc?.lastActivityAt ?: 0L
             if (pipeline.camera === cam && lastActivity < t0) {
                 DiagLog.log("[ffc] the camera did not start a calibration (state: ${pipeline.intake?.ffc?.lastState})")
                 activity.toast(activity.getString(R.string.ffc_no_reaction))
             }
-        }, ShutterCalibration.RESPONSE_WINDOW_MS + REACTION_GRACE_MS)
+        }
     }
 
     private fun askToSearch(cam: FlirCamera) {
@@ -77,39 +85,34 @@ class FfcController(
     }
 
     private fun startSearch(cam: FlirCamera) {
-        searchCancelled = false
-        searchRunning = true
         DiagLog.log("[ffc] searching for the shutter-calibration command (${ShutterCalibration.CANDIDATES.size} candidates)")
         val progress = MaterialAlertDialogBuilder(activity).setTitle(R.string.ffc_probe_title)
             .setMessage(R.string.ffc_probe_running)
             .setCancelable(false)
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> searchCancelled = true }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> search?.cancel() }
             .show()
-        Thread({
-            val result = runSearch(cam)
-            DiagLog.log("[ffc] search finished: ${result.outcome}, tried ${result.tried}, command ${result.command}")
-            activity.runOnUiThread {
+        search = activity.lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) { runSearch(cam) }
+                DiagLog.log("[ffc] search finished: ${result.outcome}, tried ${result.tried}, command ${result.command}")
+                if (!result.cancelled && !activity.isFinishing) showResult(result)
+            } finally {
                 if (!activity.isDestroyed) progress.dismiss()
-                if (!result.cancelled && !activity.isFinishing && !activity.isDestroyed) showResult(result)
             }
-        }, "flir-ffc-probe").start()
+        }
     }
 
-    private fun runSearch(cam: FlirCamera): ShutterCalibration.Result = try {
-        ShutterCalibration.probe(
-            candidates = ShutterCalibration.CANDIDATES,
-            send = { cam.sendJson(it) },
-            ffcStartedSince = { (pipeline.intake?.ffc?.lastActivityAt ?: 0L) >= it },
-            ffcInProgress = { inProgress() },
-            calibrationWanted = { pipeline.intake?.ffc?.wanted() == true },
-            now = { SystemClock.elapsedRealtime() },
-            sleep = { Thread.sleep(it) },
-            log = { DiagLog.log("[ffc] $it") },
-            isCancelled = { searchCancelled || pipeline.camera !== cam }
-        )
-    } finally {
-        searchRunning = false
-    }
+    private suspend fun runSearch(cam: FlirCamera): ShutterCalibration.Result = ShutterCalibration.probe(
+        candidates = ShutterCalibration.CANDIDATES,
+        send = { cam.sendJson(it) },
+        ffcStartedSince = { (pipeline.intake?.ffc?.lastActivityAt ?: 0L) >= it },
+        ffcInProgress = { inProgress() },
+        calibrationWanted = { pipeline.intake?.ffc?.wanted() == true },
+        now = { SystemClock.elapsedRealtime() },
+        sleep = { delay(it) },
+        log = { DiagLog.log("[ffc] $it") },
+        isCancelled = { pipeline.camera !== cam }
+    )
 
     private fun showResult(result: ShutterCalibration.Result) {
         val found = result.command
@@ -139,9 +142,9 @@ class FfcController(
         val session = pipeline.intake?.takeIf { it.frameCount > 0 && it !== ensuredFor }
         if (cam != null && session != null && idle) {
             ensuredFor = session
-            Thread({
+            activity.lifecycleScope.launch(Dispatchers.IO) {
                 DiagLog.log("[ffc] automatic calibration ensured: ${cam.sendJson(ShutterCalibration.AUTO_ON)}")
-            }, "flir-auto-on").start()
+            }
         }
     }
 

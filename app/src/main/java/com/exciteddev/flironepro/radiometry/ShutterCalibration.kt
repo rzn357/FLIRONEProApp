@@ -1,5 +1,8 @@
 package com.exciteddev.flironepro.radiometry
 
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+
 /**
  * Manual shutter calibration (FFC, "tuning" in FLIR's SDK) of the camera.
  *
@@ -12,7 +15,8 @@ package com.exciteddev.flironepro.radiometry
  * So the search switches automatic calibration off, waits until the camera asks for a calibration (VALID_IMG / DESIRED) and
  * then tries the candidate commands one by one, watching whether the shutter starts. Because the camera cannot calibrate by
  * itself meanwhile, a reaction is caused by the command. Automatic calibration is always switched back on at the end.
- * Everything is injected, so the logic is unit-tested without a camera.
+ * Everything is injected, so the logic is unit-tested without a camera. The search is a suspending function: cancelling the
+ * coroutine that runs it stops the search at its next wait, and automatic calibration is switched back on all the same.
  */
 object ShutterCalibration {
     /** How long to wait for the shutter to react to a command. */
@@ -67,15 +71,17 @@ object ShutterCalibration {
      * @param ffcStartedSince true if a shutter calibration started at or after the given time (ms)
      * @param ffcInProgress true while the shutter is closed or a calibration is just running
      * @param calibrationWanted true while the camera itself asks for a calibration (VALID_IMG / DESIRED)
+     * @param sleep waits the given time (ms); the search can be cancelled while it waits
+     * @param isCancelled true if the search has to end without a result (the camera is gone), as opposed to a cancelled coroutine
      */
-    fun probe(
+    suspend fun probe(
         candidates: List<String>,
         send: (String) -> Boolean,
         ffcStartedSince: (Long) -> Boolean,
         ffcInProgress: () -> Boolean,
         calibrationWanted: () -> Boolean,
         now: () -> Long,
-        sleep: (Long) -> Unit,
+        sleep: suspend (Long) -> Unit,
         log: (String) -> Unit,
         isCancelled: () -> Boolean = { false }
     ): Result = Search(send, ffcStartedSince, ffcInProgress, calibrationWanted, now, sleep, log, isCancelled).run(candidates)
@@ -90,14 +96,14 @@ object ShutterCalibration {
         val ffcInProgress: () -> Boolean,
         val calibrationWanted: () -> Boolean,
         val now: () -> Long,
-        val sleep: (Long) -> Unit,
+        val sleep: suspend (Long) -> Unit,
         val log: (String) -> Unit,
         val isCancelled: () -> Boolean
     ) {
-        fun run(candidates: List<String>): Result = precheck() ?: searchWithAutomaticCalibrationOff(candidates)
+        suspend fun run(candidates: List<String>): Result = precheck() ?: searchWithAutomaticCalibrationOff(candidates)
 
         /** The search can only start when the camera is idle and accepts the command that switches its automatic calibration off. */
-        private fun precheck(): Result? = when {
+        private suspend fun precheck(): Result? = when {
             !waitFor(BUSY_WAIT_MS) { !ffcInProgress() } -> {
                 log("the camera is busy with a calibration, giving up")
                 Result(null, 0, Outcome.CAMERA_BUSY)
@@ -111,7 +117,7 @@ object ShutterCalibration {
             else -> null
         }
 
-        private fun searchWithAutomaticCalibrationOff(candidates: List<String>): Result {
+        private suspend fun searchWithAutomaticCalibrationOff(candidates: List<String>): Result {
             val tOff = now()
             log("automatic calibration switched off; waiting for the camera to ask for a calibration")
             return try {
@@ -119,12 +125,15 @@ object ShutterCalibration {
                 val wait = waitUntilWanted(tOff)
                 wait.result ?: heldByCamera(wait.at) ?: tryCandidates(candidates)
             } finally {
-                waitFor(RESTORE_WAIT_MS) { !ffcInProgress() }
-                log("automatic calibration switched back on: ${send(AUTO_ON)}")
+                // also when the search is cancelled: the camera must not be left without its automatic calibration
+                withContext(NonCancellable) {
+                    waitFor(RESTORE_WAIT_MS) { !ffcInProgress() }
+                    log("automatic calibration switched back on: ${send(AUTO_ON)}")
+                }
             }
         }
 
-        private fun waitUntilWanted(tOff: Long): Wait {
+        private suspend fun waitUntilWanted(tOff: Long): Wait {
             val deadline = tOff + WAIT_WANTED_MS
             var wait: Wait? = null
             while (wait == null && now() < deadline) wait = pollWanted(tOff)
@@ -132,7 +141,7 @@ object ShutterCalibration {
         }
 
         /** One look at the camera; null if nothing happened yet (after a short sleep). */
-        private fun pollWanted(tOff: Long): Wait? {
+        private suspend fun pollWanted(tOff: Long): Wait? {
             val wait = when {
                 isCancelled() -> Wait(result = Result(null, 0, Outcome.CANCELLED))
 
@@ -155,14 +164,14 @@ object ShutterCalibration {
         }
 
         /** It has to wait for us now; if it starts by itself, a reaction to a command would prove nothing. */
-        private fun heldByCamera(tWanted: Long): Result? {
+        private suspend fun heldByCamera(tWanted: Long): Result? {
             log("the camera asks for a calibration; checking that it waits for a command")
             val startedByItself = waitFor(HOLD_MS) { ffcStartedSince(tWanted) }
             if (startedByItself) log("the camera started the calibration by itself")
             return if (startedByItself) Result(null, 0, Outcome.AUTO_NOT_STOPPED) else null
         }
 
-        private fun tryCandidates(candidates: List<String>): Result {
+        private suspend fun tryCandidates(candidates: List<String>): Result {
             var tried = 0
             var found: String? = null
             for (cmd in candidates) {
@@ -177,7 +186,7 @@ object ShutterCalibration {
         }
 
         /** Sends a candidate and watches whether the shutter reacts. */
-        private fun tryCommand(cmd: String): Boolean {
+        private suspend fun tryCommand(cmd: String): Boolean {
             val t0 = now()
             val sent = send(cmd)
             log(if (sent) "sent $cmd" else "could not send $cmd")
@@ -186,7 +195,7 @@ object ShutterCalibration {
             return reacted
         }
 
-        private fun waitFor(timeoutMs: Long, condition: () -> Boolean): Boolean {
+        private suspend fun waitFor(timeoutMs: Long, condition: () -> Boolean): Boolean {
             val end = now() + timeoutMs
             while (now() < end) {
                 if (condition()) return true

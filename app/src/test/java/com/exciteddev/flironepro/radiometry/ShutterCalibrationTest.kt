@@ -4,6 +4,10 @@ import com.exciteddev.flironepro.protocol.FlirCommand
 import com.exciteddev.flironepro.radiometry.ShutterCalibration.AUTO_OFF
 import com.exciteddev.flironepro.radiometry.ShutterCalibration.AUTO_ON
 import com.exciteddev.flironepro.radiometry.ShutterCalibration.Outcome
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -59,12 +63,13 @@ class ShutterCalibrationTest {
         }
 
         fun now() = time
-        fun sleep(ms: Long) {
+        suspend fun sleep(ms: Long) {
             time += ms
+            yield() // a point where a cancelled search notices it
         }
     }
 
-    private fun run(
+    private suspend fun run(
         cam: FakeCamera,
         candidates: List<String>,
         cancelled: () -> Boolean = { false },
@@ -74,7 +79,7 @@ class ShutterCalibrationTest {
     )
 
     @Test
-    fun findsTheCommandThatClosesTheShutter() {
+    fun findsTheCommandThatClosesTheShutter() = runTest {
         val cam = FakeCamera("good")
         val r = run(cam, listOf("a", "b", "good", "d"))
         assertEquals(Outcome.FOUND, r.outcome)
@@ -85,7 +90,7 @@ class ShutterCalibrationTest {
     }
 
     @Test
-    fun reportsWhenNothingReacts() {
+    fun reportsWhenNothingReacts() = runTest {
         val cam = FakeCamera(null)
         val r = run(cam, listOf("a", "b", "c"))
         assertEquals(Outcome.NOT_FOUND, r.outcome)
@@ -95,7 +100,7 @@ class ShutterCalibrationTest {
     }
 
     @Test
-    fun givesUpWhenTheCameraNeverAsksForACalibration() {
+    fun givesUpWhenTheCameraNeverAsksForACalibration() = runTest {
         val cam = FakeCamera("good", wantedAt = Long.MAX_VALUE / 2)
         val r = run(cam, listOf("good"))
         assertEquals(Outcome.NEVER_REQUESTED, r.outcome)
@@ -103,7 +108,7 @@ class ShutterCalibrationTest {
     }
 
     @Test
-    fun aCameraThatCalibratesByItselfProvesNothing() {
+    fun aCameraThatCalibratesByItselfProvesNothing() = runTest {
         val cam = FakeCamera("good", ignoresAutoOff = true)
         val r = run(cam, listOf("good", "x"))
         assertEquals(Outcome.AUTO_NOT_STOPPED, r.outcome)
@@ -112,7 +117,7 @@ class ShutterCalibrationTest {
     }
 
     @Test
-    fun cancellationStopsTheSearchAndStillRestoresAutomaticCalibration() {
+    fun searchEndsWithoutAResultWhenTheCameraIsGoneAndStillRestoresAutomaticCalibration() = runTest {
         val cam = FakeCamera("c")
         var asked = 0
         // let the wait for the camera's request pass, then cancel after the first candidate
@@ -123,7 +128,31 @@ class ShutterCalibrationTest {
     }
 
     @Test
-    fun givesUpWhenTheCameraStaysBusy() {
+    fun aCancelledCoroutineStopsTheSearchAndStillRestoresAutomaticCalibration() = runTest {
+        val cam = FakeCamera("c")
+        lateinit var search: Job
+        search = launch {
+            ShutterCalibration.probe(
+                listOf("a", "b", "c"),
+                cam::send,
+                cam::startedSince,
+                cam::inProgress,
+                cam::wanted,
+                cam::now,
+                { ms ->
+                    cam.sleep(ms)
+                    if (cam.sent.contains("a")) search.cancel() // cancelled while the first candidate is tried
+                },
+                {}
+            )
+        }
+        search.join()
+        assertTrue(search.isCancelled)
+        assertEquals(listOf(AUTO_OFF, "a", AUTO_ON), cam.sent)
+    }
+
+    @Test
+    fun givesUpWhenTheCameraStaysBusy() = runTest {
         val cam = FakeCamera("a")
         val log = ArrayList<String>()
         val r = ShutterCalibration.probe(
@@ -142,14 +171,14 @@ class ShutterCalibrationTest {
     }
 
     @Test
-    fun doesNotStartWhenTheFirstCommandCannotBeSent() {
+    fun doesNotStartWhenTheFirstCommandCannotBeSent() = runTest {
         val cam = FakeCamera("a", failAutoOff = true)
         val r = run(cam, listOf("a"))
         assertEquals(Outcome.COULD_NOT_SEND, r.outcome)
     }
 
     @Test
-    fun failedCandidateSendsAreSkipped() {
+    fun failedCandidateSendsAreSkipped() = runTest {
         val cam = FakeCamera("b")
         var candidateCalls = 0
         val r = ShutterCalibration.probe(
