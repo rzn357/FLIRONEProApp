@@ -78,8 +78,115 @@ object ShutterCalibration {
         sleep: (Long) -> Unit,
         log: (String) -> Unit,
         isCancelled: () -> Boolean = { false }
-    ): Result {
-        fun waitFor(timeoutMs: Long, condition: () -> Boolean): Boolean {
+    ): Result = Search(send, ffcStartedSince, ffcInProgress, calibrationWanted, now, sleep, log, isCancelled).run(candidates)
+
+    /** How the wait for the camera's request ended: it asked at [at], or the search is over with [result]. */
+    private class Wait(val at: Long = -1, val result: Result? = null)
+
+    /** One run of the search; everything it needs from the outside is injected. */
+    private class Search(
+        val send: (String) -> Boolean,
+        val ffcStartedSince: (Long) -> Boolean,
+        val ffcInProgress: () -> Boolean,
+        val calibrationWanted: () -> Boolean,
+        val now: () -> Long,
+        val sleep: (Long) -> Unit,
+        val log: (String) -> Unit,
+        val isCancelled: () -> Boolean
+    ) {
+        fun run(candidates: List<String>): Result = precheck() ?: searchWithAutomaticCalibrationOff(candidates)
+
+        /** The search can only start when the camera is idle and accepts the command that switches its automatic calibration off. */
+        private fun precheck(): Result? = when {
+            !waitFor(BUSY_WAIT_MS) { !ffcInProgress() } -> {
+                log("the camera is busy with a calibration, giving up")
+                Result(null, 0, Outcome.CAMERA_BUSY)
+            }
+
+            !send(AUTO_OFF) -> {
+                log("could not switch the automatic calibration off")
+                Result(null, 0, Outcome.COULD_NOT_SEND)
+            }
+
+            else -> null
+        }
+
+        private fun searchWithAutomaticCalibrationOff(candidates: List<String>): Result {
+            val tOff = now()
+            log("automatic calibration switched off; waiting for the camera to ask for a calibration")
+            return try {
+                // 1. Wait until the camera asks for a calibration, 2. check that it waits for us, 3. try the candidates.
+                val wait = waitUntilWanted(tOff)
+                wait.result ?: heldByCamera(wait.at) ?: tryCandidates(candidates)
+            } finally {
+                waitFor(RESTORE_WAIT_MS) { !ffcInProgress() }
+                log("automatic calibration switched back on: ${send(AUTO_ON)}")
+            }
+        }
+
+        private fun waitUntilWanted(tOff: Long): Wait {
+            val deadline = tOff + WAIT_WANTED_MS
+            var wait: Wait? = null
+            while (wait == null && now() < deadline) wait = pollWanted(tOff)
+            return wait ?: Wait(result = neverRequested())
+        }
+
+        /** One look at the camera; null if nothing happened yet (after a short sleep). */
+        private fun pollWanted(tOff: Long): Wait? {
+            val wait = when {
+                isCancelled() -> Wait(result = Result(null, 0, Outcome.CANCELLED))
+
+                calibrationWanted() -> Wait(at = now())
+
+                now() > tOff + SETTLE_MS && ffcStartedSince(tOff + SETTLE_MS) -> {
+                    log("the camera calibrated by itself although automatic calibration is off")
+                    Wait(result = Result(null, 0, Outcome.AUTO_NOT_STOPPED))
+                }
+
+                else -> null
+            }
+            if (wait == null) sleep(POLL_MS)
+            return wait
+        }
+
+        private fun neverRequested(): Result {
+            log("the camera did not ask for a calibration within ${WAIT_WANTED_MS / MS_PER_SECOND} s")
+            return Result(null, 0, Outcome.NEVER_REQUESTED)
+        }
+
+        /** It has to wait for us now; if it starts by itself, a reaction to a command would prove nothing. */
+        private fun heldByCamera(tWanted: Long): Result? {
+            log("the camera asks for a calibration; checking that it waits for a command")
+            val startedByItself = waitFor(HOLD_MS) { ffcStartedSince(tWanted) }
+            if (startedByItself) log("the camera started the calibration by itself")
+            return if (startedByItself) Result(null, 0, Outcome.AUTO_NOT_STOPPED) else null
+        }
+
+        private fun tryCandidates(candidates: List<String>): Result {
+            var tried = 0
+            var found: String? = null
+            for (cmd in candidates) {
+                if (isCancelled()) return Result(null, tried, Outcome.CANCELLED)
+                tried++
+                if (tryCommand(cmd)) {
+                    found = cmd
+                    break
+                }
+            }
+            return Result(found, tried, if (found != null) Outcome.FOUND else Outcome.NOT_FOUND)
+        }
+
+        /** Sends a candidate and watches whether the shutter reacts. */
+        private fun tryCommand(cmd: String): Boolean {
+            val t0 = now()
+            val sent = send(cmd)
+            log(if (sent) "sent $cmd" else "could not send $cmd")
+            val reacted = sent && waitFor(RESPONSE_WINDOW_MS) { ffcStartedSince(t0) }
+            if (reacted) log("the shutter reacted to $cmd")
+            return reacted
+        }
+
+        private fun waitFor(timeoutMs: Long, condition: () -> Boolean): Boolean {
             val end = now() + timeoutMs
             while (now() < end) {
                 if (condition()) return true
@@ -87,70 +194,11 @@ object ShutterCalibration {
             }
             return condition()
         }
-
-        if (!waitFor(BUSY_WAIT_MS) { !ffcInProgress() }) {
-            log("the camera is busy with a calibration, giving up")
-            return Result(null, 0, Outcome.CAMERA_BUSY)
-        }
-        if (!send(AUTO_OFF)) {
-            log("could not switch the automatic calibration off")
-            return Result(null, 0, Outcome.COULD_NOT_SEND)
-        }
-        val tOff = now()
-        log("automatic calibration switched off; waiting for the camera to ask for a calibration")
-        try {
-            // 1. Wait until the camera asks for a calibration.
-            var tWanted = -1L
-            val deadline = tOff + WAIT_WANTED_MS
-            while (now() < deadline) {
-                if (isCancelled()) return Result(null, 0, Outcome.CANCELLED)
-                if (calibrationWanted()) {
-                    tWanted = now()
-                    break
-                }
-                if (now() > tOff + SETTLE_MS && ffcStartedSince(tOff + SETTLE_MS)) {
-                    log("the camera calibrated by itself although automatic calibration is off")
-                    return Result(null, 0, Outcome.AUTO_NOT_STOPPED)
-                }
-                sleep(POLL_MS)
-            }
-            if (tWanted < 0) {
-                log("the camera did not ask for a calibration within ${WAIT_WANTED_MS / 1000} s")
-                return Result(null, 0, Outcome.NEVER_REQUESTED)
-            }
-
-            // 2. It has to wait for us now; if it starts by itself, a reaction to a command would prove nothing.
-            log("the camera asks for a calibration; checking that it waits for a command")
-            if (waitFor(HOLD_MS) { ffcStartedSince(tWanted) }) {
-                log("the camera started the calibration by itself")
-                return Result(null, 0, Outcome.AUTO_NOT_STOPPED)
-            }
-
-            // 3. Try the candidates.
-            var tried = 0
-            for (cmd in candidates) {
-                if (isCancelled()) return Result(null, tried, Outcome.CANCELLED)
-                tried++
-                val t0 = now()
-                if (!send(cmd)) {
-                    log("could not send $cmd")
-                    continue
-                }
-                log("sent $cmd")
-                if (waitFor(RESPONSE_WINDOW_MS) { ffcStartedSince(t0) }) {
-                    log("the shutter reacted to $cmd")
-                    return Result(cmd, tried, Outcome.FOUND)
-                }
-            }
-            return Result(null, tried, Outcome.NOT_FOUND)
-        } finally {
-            waitFor(RESTORE_WAIT_MS) { !ffcInProgress() }
-            log("automatic calibration switched back on: ${send(AUTO_ON)}")
-        }
     }
 
     private const val POLL_MS = 100L
     private const val BUSY_WAIT_MS = 10_000L
+    private const val MS_PER_SECOND = 1000
 
     /** Longer than the camera's own calibration period (~116 s). */
     private const val WAIT_WANTED_MS = 200_000L

@@ -1,91 +1,5 @@
 package com.exciteddev.flironepro
 
-import kotlin.math.abs
-
-enum class Palette {
-    IRON,
-    RAINBOW,
-    GRAY,
-    BLACK_HOT,
-    LAVA,
-    ARCTIC
-}
-
-object Palettes {
-    /** 256 ARGB colors for the given palette (index 0 = coldest, 255 = hottest). */
-    fun lut(p: Palette): IntArray = IntArray(256) { i ->
-        val t = i / 255f
-        when (p) {
-            Palette.GRAY -> rgb(i, i, i)
-            Palette.BLACK_HOT -> rgb(255 - i, 255 - i, 255 - i)
-            Palette.IRON -> gradient(ironStops, t)
-            Palette.LAVA -> gradient(lavaStops, t)
-            Palette.ARCTIC -> gradient(arcticStops, t)
-            Palette.RAINBOW -> rainbow(t)
-        }
-    }
-
-    private val ironStops = arrayOf(
-        floatArrayOf(0.00f, 0f, 0f, 0f),
-        floatArrayOf(0.18f, 40f, 0f, 90f),
-        floatArrayOf(0.42f, 190f, 20f, 70f),
-        floatArrayOf(0.62f, 245f, 90f, 10f),
-        floatArrayOf(0.82f, 255f, 190f, 30f),
-        floatArrayOf(1.00f, 255f, 255f, 220f)
-    )
-
-    private val lavaStops = arrayOf(
-        floatArrayOf(0.00f, 0f, 0f, 0f),
-        floatArrayOf(0.25f, 120f, 0f, 0f),
-        floatArrayOf(0.50f, 255f, 120f, 0f),
-        floatArrayOf(0.75f, 255f, 230f, 0f),
-        floatArrayOf(1.00f, 255f, 255f, 255f)
-    )
-
-    private val arcticStops = arrayOf(
-        floatArrayOf(0.00f, 0f, 0f, 80f),
-        floatArrayOf(0.20f, 0f, 80f, 255f),
-        floatArrayOf(0.40f, 0f, 220f, 255f),
-        floatArrayOf(0.55f, 255f, 255f, 255f),
-        floatArrayOf(0.72f, 255f, 230f, 0f),
-        floatArrayOf(0.90f, 255f, 40f, 0f),
-        floatArrayOf(1.00f, 140f, 0f, 0f)
-    )
-
-    private fun gradient(stops: Array<FloatArray>, t: Float): Int {
-        for (k in 1 until stops.size) {
-            val a = stops[k - 1]
-            val b = stops[k]
-            if (t <= b[0]) {
-                val f = (t - a[0]) / (b[0] - a[0])
-                return rgb(
-                    (a[1] + (b[1] - a[1]) * f).toInt(),
-                    (a[2] + (b[2] - a[2]) * f).toInt(),
-                    (a[3] + (b[3] - a[3]) * f).toInt()
-                )
-            }
-        }
-        val last = stops.last()
-        return rgb(last[1].toInt(), last[2].toInt(), last[3].toInt())
-    }
-
-    /** Blue (cold) -> red (hot). */
-    private fun rainbow(t: Float): Int {
-        val h = (1f - t) * 240f / 60f // 0..4
-        val x = 1f - abs(h % 2f - 1f)
-        val (r, g, b) = when {
-            h < 1f -> Triple(1f, x, 0f)
-            h < 2f -> Triple(x, 1f, 0f)
-            h < 3f -> Triple(0f, 1f, x)
-            else -> Triple(0f, x, 1f)
-        }
-        return rgb((r * 255).toInt(), (g * 255).toInt(), (b * 255).toInt())
-    }
-
-    private fun rgb(r: Int, g: Int, b: Int) =
-        (0xFF shl 24) or (r.coerceIn(0, 255) shl 16) or (g.coerceIn(0, 255) shl 8) or b.coerceIn(0, 255)
-}
-
 class ThermalStats(
     val min: Int,
     val max: Int,
@@ -104,6 +18,26 @@ object ThermalImage {
     const val W = 160
     const val H = 120
 
+    private const val BYTES_PER_PIXEL = LeptonPacket.BYTES_PER_PIXEL
+
+    /** Service bytes in front of each half of a row in layout A (the Lepton packet header). */
+    private const val PACKET_HEADER = LeptonPacket.HEADER
+
+    /** Pixels per row in layout A: 160 pixels and the service words of the two halves. */
+    private const val W_STRIDE_A = 164
+    private const val LAYOUT_A_BYTES = W_STRIDE_A * H * BYTES_PER_PIXEL + PACKET_HEADER
+    private const val LAYOUT_B_BYTES = W * H * BYTES_PER_PIXEL
+
+    /** Pixels around the edge that are ignored when looking for the extremes (artifacts are common there). */
+    private const val BORDER = 2
+    private const val LUT_LAST = 255
+    private const val SMOOTH_AREA = 9
+    private const val CENTER_PIXELS = 4
+
+    /** The crosshair arms start [CROSSHAIR_NEAR] and end [CROSSHAIR_FAR] pixels from the center. */
+    private const val CROSSHAIR_NEAR = 3
+    private const val CROSSHAIR_FAR = 7
+
     /**
      * Extracts the 160x120 raw 16-bit values from a frame. Returns null if the thermal block size does not match
      * any known layout (then the frame has to be analyzed manually).
@@ -114,32 +48,33 @@ object ThermalImage {
     fun decode(frame: FlirFrame, out: IntArray = IntArray(W * H)): IntArray? {
         val d = frame.data
         val base = frame.thermalOffset
+        val fitsA = frame.thermalSize >= LAYOUT_A_BYTES && base + LAYOUT_A_BYTES <= d.size
+        val fitsB = frame.thermalSize >= LAYOUT_B_BYTES && base + LAYOUT_B_BYTES <= d.size
         when {
-            frame.thermalSize >= W_STRIDE_A * H * 2 + 4 && base + W_STRIDE_A * H * 2 + 4 <= d.size -> {
-                for (y in 0 until H) {
-                    for (x in 0 until W) {
-                        val skip = if (x < W / 2) 0 else 4
-                        val o = base + 4 + 2 * (y * W_STRIDE_A + x) + skip
-                        out[y * W + x] = (d[o].toInt() and 0xFF) or ((d[o + 1].toInt() and 0xFF) shl 8)
-                    }
-                }
-            }
-
-            frame.thermalSize >= W * H * 2 && base + W * H * 2 <= d.size -> {
-                for (i in 0 until W * H) {
-                    val o = base + 2 * i
-                    out[i] = (d[o].toInt() and 0xFF) or ((d[o + 1].toInt() and 0xFF) shl 8)
-                }
-            }
-
+            fitsA -> decodeLayoutA(d, base, out)
+            fitsB -> decodeLayoutB(d, base, out)
             else -> return null
         }
         return out
     }
 
+    private fun decodeLayoutA(d: ByteArray, base: Int, out: IntArray) {
+        for (y in 0 until H) {
+            for (x in 0 until W) {
+                val skip = if (x < W / 2) 0 else PACKET_HEADER
+                val o = base + PACKET_HEADER + BYTES_PER_PIXEL * (y * W_STRIDE_A + x) + skip
+                out[y * W + x] = Bytes.u16(d, o)
+            }
+        }
+    }
+
+    private fun decodeLayoutB(d: ByteArray, base: Int, out: IntArray) {
+        for (i in 0 until W * H) out[i] = Bytes.u16(d, base + BYTES_PER_PIXEL * i)
+    }
+
     fun layoutName(thermalSize: Int): String = when {
-        thermalSize >= W_STRIDE_A * H * 2 + 4 -> "A(164)"
-        thermalSize >= W * H * 2 -> "B(160)"
+        thermalSize >= LAYOUT_A_BYTES -> "A($W_STRIDE_A)"
+        thermalSize >= LAYOUT_B_BYTES -> "B($W)"
         else -> "unknown"
     }
 
@@ -162,15 +97,20 @@ object ThermalImage {
                 maxI = i
             }
         }
-        val center = (raw[59 * W + 79] + raw[59 * W + 80] + raw[60 * W + 79] + raw[60 * W + 80]) / 4
-        return ThermalStats(min, max, center, minI % W, minI / W, maxI % W, maxI / W, (sum / raw.size).toInt())
+        return ThermalStats(min, max, centerValue(raw), minI % W, minI / W, maxI % W, maxI / W, (sum / raw.size).toInt())
+    }
+
+    /** Mean of the 2x2 pixels around the middle of the frame. */
+    private fun centerValue(raw: IntArray): Int {
+        val top = (H / 2 - 1) * W + W / 2 - 1
+        return (raw[top] + raw[top + 1] + raw[top + W] + raw[top + W + 1]) / CENTER_PIXELS
     }
 
     /** Linear stretch of min..max over 256 colors. Fills out (ARGB) and returns the statistics. */
     fun render(raw: IntArray, lut: IntArray, out: IntArray, stats: ThermalStats = stats(raw)): ThermalStats {
         val delta = maxOf(1, stats.max - stats.min)
         for (i in raw.indices) {
-            out[i] = lut[(raw[i] - stats.min) * 255 / delta]
+            out[i] = lut[(raw[i] - stats.min) * LUT_LAST / delta]
         }
         return stats
     }
@@ -179,7 +119,7 @@ object ThermalImage {
     fun drawCrosshair(pixels: IntArray, color: Int = 0xFFFFFFFF.toInt()) {
         val cx = W / 2
         val cy = H / 2
-        for (d in 3..7) {
+        for (d in CROSSHAIR_NEAR..CROSSHAIR_FAR) {
             pixels[cy * W + cx - d] = color
             pixels[cy * W + cx + d - 1] = color
             pixels[(cy - d) * W + cx] = color
@@ -200,7 +140,7 @@ object ThermalImage {
                     raw[ya + xa] + raw[ya + x] + raw[ya + xc] +
                         raw[yb + xa] + raw[yb + x] + raw[yb + xc] +
                         raw[yc + xa] + raw[yc + x] + raw[yc + xc]
-                    ) / 9
+                    ) / SMOOTH_AREA
             }
         }
     }
@@ -243,26 +183,4 @@ object ThermalImage {
         }
         return sum.toDouble() / n
     }
-
-    /**
-     * The 240 Lepton telemetry words from the last 3 packets (240..242) of the thermal block, or null if the block is
-     * shorter. Words 20..31 hold the frame counter, the frame mean, the sensor and housing temperatures, etc.
-     */
-    fun telemetry(frame: FlirFrame): IntArray? {
-        val last = 243 * PACKET
-        if (frame.thermalSize < last || frame.thermalOffset + last > frame.data.size) return null
-        val out = IntArray(240)
-        for (p in 0 until 3) {
-            val base = frame.thermalOffset + (240 + p) * PACKET + 4
-            for (i in 0 until 80) {
-                val o = base + 2 * i
-                out[p * 80 + i] = (frame.data[o].toInt() and 0xFF) or ((frame.data[o + 1].toInt() and 0xFF) shl 8)
-            }
-        }
-        return out
-    }
-
-    private const val PACKET = 164
-    private const val W_STRIDE_A = 164
-    private const val BORDER = 2
 }

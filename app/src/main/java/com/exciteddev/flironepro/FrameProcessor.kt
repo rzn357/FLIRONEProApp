@@ -3,10 +3,6 @@ package com.exciteddev.flironepro
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Matrix
-import android.graphics.Paint
 import android.os.SystemClock
 import java.util.concurrent.Executors
 
@@ -22,6 +18,84 @@ class FrameSample(
 /** Averaged reading under the crosshair for calibration: S' (without the user offset) and the shutter's Φ of the anchor. */
 class CalSample(val relative: Double, val phiShutter: Double, val tempC: Double?)
 
+/** The last few readings under the crosshair, so a reference point can be added from their average. */
+class CalibrationRing {
+    private val ring = ArrayDeque<CalSample>()
+
+    fun add(sample: CalSample) {
+        synchronized(ring) {
+            ring.addLast(sample)
+            while (ring.size > CAPACITY) ring.removeFirst()
+        }
+    }
+
+    /** The average of the stored readings, or null if there are none. */
+    fun average(): CalSample? = synchronized(ring) {
+        if (ring.isEmpty()) {
+            null
+        } else {
+            CalSample(
+                relative = ring.map { it.relative }.average(),
+                phiShutter = ring.map { it.phiShutter }.average(),
+                tempC = ring.mapNotNull { it.tempC }.takeIf { it.isNotEmpty() }?.average()
+            )
+        }
+    }
+
+    private companion object {
+        const val CAPACITY = 10
+    }
+}
+
+/** The span of raw values that is mapped onto the palette. It follows the scene smoothly, so the colors do not flicker. */
+class ColorRange {
+    private var lo = 0.0
+    private var hi = 0.0
+    private var initialized = false
+
+    fun update(newLo: Double, newHi: Double) {
+        if (initialized) {
+            lo += SMOOTHING * (newLo - lo)
+            hi += SMOOTHING * (newHi - hi)
+        } else {
+            lo = newLo
+            hi = newHi
+            initialized = true
+        }
+    }
+
+    /** The range as (low, high), widened to a minimum span so that noise is not amplified on a flat scene. */
+    fun widened(): Pair<Double, Double> {
+        if (hi - lo >= MIN_SPAN) return Pair(lo, hi)
+        val mid = (hi + lo) / 2
+        return Pair(mid - MIN_SPAN / 2, mid + MIN_SPAN / 2)
+    }
+
+    private companion object {
+        const val SMOOTHING = 0.3
+        const val MIN_SPAN = 80.0
+    }
+}
+
+/** The palette's 256 colors, rebuilt only when the palette changes. */
+private class LutCache {
+    private var palette: Palette? = null
+    private var lut = IntArray(0)
+
+    fun get(p: Palette): IntArray {
+        if (palette != p) {
+            lut = Palettes.lut(p)
+            palette = p
+        }
+        return lut
+    }
+}
+
+/** Position of the center of pixel [i] of a row (or column) of [size] pixels, as a fraction of the whole row. */
+private fun pixelCenter(i: Int, size: Int): Float = (i + PIXEL_CENTER) / size
+
+private const val PIXEL_CENTER = 0.5f
+
 /**
  * Render thread: takes the newest frame, composes the picture for the current mode (thermal / visible / MSX), computes the
  * temperatures under the crosshair and at the markers, hands everything to the screen and, if requested, to the video
@@ -32,12 +106,15 @@ class FrameProcessor(
     private val settings: AppSettings,
     private val radiometry: Radiometry,
     private val view: ThermalView,
-    private val texts: UiTexts
+    texts: UiTexts
 ) : Thread("flir-render") {
 
     @Volatile var recorder: VideoRecorder? = null
 
     @Volatile var onPhotoSaved: ((String?) -> Unit)? = null
+
+    /** The readings under the crosshair of the last frames (for the temperature calibration). */
+    val calibration = CalibrationRing()
 
     @Volatile private var photoRequested = false
 
@@ -52,9 +129,7 @@ class FrameProcessor(
     private var haveThermal = false
     private var fpaK = 0.0
     private var extremes: Extremes? = null
-    private var rangeLo = 0.0
-    private var rangeHi = 0.0
-    private var rangeInit = false
+    private val range = ColorRange()
 
     private val argb = IntArray(ImageComposer.OUT_W * ImageComposer.OUT_H)
     private val scratch = ImageComposer.Scratch()
@@ -64,10 +139,9 @@ class FrameProcessor(
     private val decodeOpts = BitmapFactory.Options().apply { inSampleSize = 2 }
     private val decodeOptsFull = BitmapFactory.Options().apply { inSampleSize = 1 }
 
-    private val calRing = ArrayDeque<CalSample>()
-    private val capturePaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val renderer = PictureRenderer(settings, texts)
+    private val luts = LutCache()
     private val saver = Executors.newSingleThreadExecutor()
-    private val painters = HashMap<Int, OverlayPainter>()
 
     private var timeSum = 0L
     private var timeMax = 0L
@@ -87,14 +161,15 @@ class FrameProcessor(
     fun shutdown() {
         running = false
         synchronized(lock) { lock.notifyAll() }
-        runCatching { join(2000) }
+        runCatching { join(JOIN_MS) }
         saver.shutdown()
     }
 
+    @Suppress("TooGenericExceptionCaught") // whatever goes wrong with one frame must not stop the render thread
     override fun run() {
         while (running) {
             val s = synchronized(lock) {
-                while (running && latest == null) lock.wait(200)
+                while (running && latest == null) lock.wait(WAIT_MS)
                 val x = latest
                 latest = null
                 x
@@ -108,7 +183,7 @@ class FrameProcessor(
             val dt = SystemClock.elapsedRealtime() - t0
             timeSum += dt
             if (dt > timeMax) timeMax = dt
-            if (++timeCount == 60) {
+            if (++timeCount == REPORT_EVERY) {
                 DiagLog.log("Frame processing (mode ${settings.mode}): average ${timeSum / timeCount} ms, max $timeMax ms")
                 timeSum = 0
                 timeMax = 0
@@ -126,30 +201,13 @@ class FrameProcessor(
             ThermalImage.smooth3(thermalRaw, smoothed)
             val ex = ThermalImage.extremes(smoothed)
             extremes = ex
-            val lo = ex.minValue.toDouble()
-            val hi = ex.maxValue.toDouble()
-            if (!rangeInit) {
-                rangeLo = lo
-                rangeHi = hi
-                rangeInit = true
-            } else {
-                rangeLo += 0.3 * (lo - rangeLo)
-                rangeHi += 0.3 * (hi - rangeHi)
-            }
+            range.update(ex.minValue.toDouble(), ex.maxValue.toDouble())
             haveThermal = true
         }
 
         if (mode != DisplayMode.THERMAL) decodeVisible(s.frame)
 
-        // Minimum span of the range, so noise is not amplified on a flat scene.
-        var lo = rangeLo
-        var hi = rangeHi
-        if (hi - lo < MIN_SPAN) {
-            val mid = (hi + lo) / 2
-            lo = mid - MIN_SPAN / 2
-            hi = mid + MIN_SPAN / 2
-        }
-
+        val (lo, hi) = range.widened()
         val content: Bitmap? = when (mode) {
             DisplayMode.VISIBLE -> visBitmap
             else -> if (haveThermal) buildThermalBitmap(mode, lo, hi) else null
@@ -158,7 +216,7 @@ class FrameProcessor(
         val overlay = buildOverlay(mode, lo, hi, s)
         if (content != null) {
             view.submit(content, overlay)
-            recorder?.let { rec -> rec.encode { canvas -> drawComposite(canvas, rec.width, rec.height, content, overlay) } }
+            recorder?.let { rec -> rec.encode { canvas -> renderer.draw(canvas, rec.width, rec.height, content, overlay) } }
             if (photoRequested) {
                 photoRequested = false
                 savePhoto(content, overlay)
@@ -178,7 +236,7 @@ class FrameProcessor(
     }
 
     private fun buildThermalBitmap(mode: DisplayMode, lo: Double, hi: Double): Bitmap {
-        ImageComposer.thermalToArgb(thermalRaw, lo, hi, cachedLut(settings.palette), argb)
+        ImageComposer.thermalToArgb(thermalRaw, lo, hi, luts.get(settings.palette), argb)
         val vis = visBitmap
         if (mode == DisplayMode.MSX && vis != null) {
             val n = vis.width * vis.height
@@ -191,16 +249,6 @@ class FrameProcessor(
             ImageComposer.msx(argb, visLuma, vis.width, vis.height, settings.alignment, settings.msxGain, scratch)
         }
         return Bitmap.createBitmap(argb, ImageComposer.OUT_W, ImageComposer.OUT_H, Bitmap.Config.ARGB_8888)
-    }
-
-    private var lutPalette: Palette? = null
-    private var lutCache: IntArray = IntArray(256)
-    private fun cachedLut(p: Palette): IntArray {
-        if (lutPalette != p) {
-            lutCache = Palettes.lut(p)
-            lutPalette = p
-        }
-        return lutCache
     }
 
     private fun buildOverlay(mode: DisplayMode, lo: Double, hi: Double, s: FrameSample): OverlayState {
@@ -217,23 +265,17 @@ class FrameProcessor(
             cross = Reading(crossU, crossV, crossT)
             recordCalSample(avg, crossT)
             extremes?.let { ex ->
-                hot = Reading(
-                    (ex.maxX + 0.5f) / ThermalImage.W,
-                    (ex.maxY + 0.5f) / ThermalImage.H,
-                    radiometry.celsius(ex.maxValue.toDouble(), fpaK)
-                )
-                cold = Reading(
-                    (ex.minX + 0.5f) / ThermalImage.W,
-                    (ex.minY + 0.5f) / ThermalImage.H,
-                    radiometry.celsius(ex.minValue.toDouble(), fpaK)
-                )
+                fun at(x: Int, y: Int, value: Int) =
+                    Reading(pixelCenter(x, ThermalImage.W), pixelCenter(y, ThermalImage.H), radiometry.celsius(value.toDouble(), fpaK))
+                hot = at(ex.maxX, ex.maxY, ex.maxValue)
+                cold = at(ex.minX, ex.minY, ex.minValue)
             }
             loC = radiometry.celsius(lo, fpaK)
             hiC = radiometry.celsius(hi, fpaK)
         }
         return OverlayState(
             mode = mode,
-            lut = cachedLut(settings.palette),
+            lut = luts.get(settings.palette),
             cross = cross,
             hot = hot,
             cold = cold,
@@ -246,53 +288,14 @@ class FrameProcessor(
     }
 
     private fun recordCalSample(avgRaw: Double, tempC: Double?) {
-        val rel = radiometry.relative(avgRaw, fpaK) ?: return
-        val phi = radiometry.shutterPhi(fpaK) ?: return
-        synchronized(calRing) {
-            calRing.addLast(CalSample(rel, phi, tempC))
-            while (calRing.size > RING) calRing.removeFirst()
-        }
-    }
-
-    /** Reading under the crosshair averaged over the last frames (for adding a reference point). */
-    fun calibrationSample(): CalSample? = synchronized(calRing) {
-        if (calRing.isEmpty()) return null
-        CalSample(
-            relative = calRing.map { it.relative }.average(),
-            phiShutter = calRing.map { it.phiShutter }.average(),
-            tempC = calRing.mapNotNull { it.tempC }.takeIf { it.isNotEmpty() }?.average()
-        )
-    }
-
-    /** Draws the picture and the overlays on a canvas of the given size (for photos and videos; always the whole frame). */
-    private fun drawComposite(canvas: Canvas, w: Int, h: Int, content: Bitmap, overlay: OverlayState) {
-        canvas.drawColor(Color.BLACK)
-        val t = ViewTransform(w.toFloat(), h.toFloat(), content.width.toFloat() / content.height, settings.rotation, settings.mirror)
-        val cw = content.width.toFloat()
-        val ch = content.height.toFloat()
-        val src = floatArrayOf(0f, 0f, cw, 0f, cw, ch, 0f, ch)
-        val corners = arrayOf(floatArrayOf(0f, 0f), floatArrayOf(1f, 0f), floatArrayOf(1f, 1f), floatArrayOf(0f, 1f))
-        val dst = FloatArray(8)
-        for (i in 0 until 4) {
-            dst[2 * i] = t.toViewX(corners[i][0], corners[i][1])
-            dst[2 * i + 1] = t.toViewY(corners[i][0], corners[i][1])
-        }
-        val m = Matrix()
-        m.setPolyToPoly(src, 0, dst, 0, 4)
-        canvas.drawBitmap(content, m, capturePaint)
-        val painter = synchronized(painters) { painters.getOrPut(w) { OverlayPainter(w / 360f, texts) } }
-        painter.draw(
-            canvas, t, overlay, settings.crossU, settings.crossV, settings.alignment,
-            settings.showMarkers, settings.showScale, null
-        )
+        val rel = radiometry.relative(avgRaw, fpaK)
+        val phi = radiometry.shutterPhi(fpaK)
+        if (rel != null && phi != null) calibration.add(CalSample(rel, phi, tempC))
     }
 
     private fun savePhoto(content: Bitmap, overlay: OverlayState) {
-        val rotated = settings.rotation % 180 != 0
-        val w = if (rotated) PHOTO_H else PHOTO_W
-        val h = if (rotated) PHOTO_W else PHOTO_H
-        val bm = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        drawComposite(Canvas(bm), w, h, content, overlay)
+        val sideways = Orientation.isSideways(settings.rotation)
+        val bm = renderer.render(if (sideways) PHOTO_H else PHOTO_W, if (sideways) PHOTO_W else PHOTO_H, content, overlay)
         saver.execute {
             val name = MediaSaver.savePhoto(context, bm)
             DiagLog.log("Photo saved: $name")
@@ -301,17 +304,13 @@ class FrameProcessor(
     }
 
     /** Renders the current picture into a bitmap (diagnostic snapshots). */
-    fun renderSnapshot(w: Int, h: Int): Bitmap? {
-        val vf = view.currentFrame() ?: return null
-        val bm = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        drawComposite(Canvas(bm), w, h, vf.first, vf.second)
-        return bm
-    }
+    fun renderSnapshot(w: Int, h: Int): Bitmap? = view.currentFrame()?.let { (bitmap, overlay) -> renderer.render(w, h, bitmap, overlay) }
 
     private companion object {
-        const val MIN_SPAN = 80.0
-        const val RING = 10
         const val PHOTO_W = 960
         const val PHOTO_H = 720
+        const val JOIN_MS = 2000L
+        const val WAIT_MS = 200L
+        const val REPORT_EVERY = 60
     }
 }

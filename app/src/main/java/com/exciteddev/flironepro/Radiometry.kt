@@ -94,15 +94,16 @@ class Radiometry {
     fun celsius(raw: Int, fpaK: Double): Double? = celsius(raw.toDouble(), fpaK)
 
     /** Temperature in degrees Celsius for a raw value, or null if there is no anchor yet or the value is outside the model. */
-    fun celsius(raw: Double, fpaK: Double): Double? {
-        val rel = relative(raw, fpaK) ?: return null
+    fun celsius(raw: Double, fpaK: Double): Double? = relative(raw, fpaK)?.let { objectTemperature(it, fpaK) }
+
+    /** Undoes the sensor model, the emissivity and the reflection: the temperature of the object for S' = [rel]. */
+    private fun objectTemperature(rel: Double, fpaK: Double): Double? {
         val phiMeas = shutterPhi(fpaK)!! + (rel - offsetCounts) / countsPerPhi
         val e = emissivity.coerceIn(MIN_EMISSIVITY, 1.0)
-        val phiRefl = planck(reflectedC + 273.15)
+        val phiRefl = planck(reflectedC + KELVIN)
         val phiObj = (phiMeas - (1.0 - e) * phiRefl) / e
-        if (phiObj <= 0.0) return null
-        val t = B / ln(R / phiObj + F) - 273.15
-        return if (t.isNaN() || t.isInfinite()) null else t
+        val t = if (phiObj > 0.0) B / ln(R / phiObj + F) - KELVIN else Double.NaN
+        return t.takeIf { it.isFinite() }
     }
 
     /**
@@ -117,7 +118,7 @@ class Radiometry {
         reflectedC: Double
     ): TempCalibration.Point {
         val e = emissivity.coerceIn(MIN_EMISSIVITY, 1.0)
-        val phiMeas = e * planck(trueC + 273.15) + (1.0 - e) * planck(reflectedC + 273.15)
+        val phiMeas = e * planck(trueC + KELVIN) + (1.0 - e) * planck(reflectedC + KELVIN)
         return TempCalibration.Point(y = relative, x = phiMeas - phiShutter, trueC = trueC)
     }
 
@@ -135,6 +136,9 @@ class Radiometry {
         const val FPA_DRIFT = 100.0
 
         const val MIN_EMISSIVITY = 0.05
+
+        /** 0 °C in kelvin. */
+        const val KELVIN = 273.15
 
         private const val PLATEAU_RANGE = 150
         private const val MIN_PLATEAU_FRAMES = 3

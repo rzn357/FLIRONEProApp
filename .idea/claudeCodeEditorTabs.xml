@@ -1,26 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ClaudeCodeEditorTabs">
-    <option name="activeSessionId" value="71cf0077-d6c7-448c-a131-74839c642875" />
+    <option name="activeSessionId" value="e857f6b7-8d03-452a-9faa-890cb874023b" />
     <option name="openSessionIds">
       <list>
         <option value="c489270a-d7a2-48f7-bec9-67bbded59de7" />
         <option value="52f260dd-977a-44af-b6e8-3e015e5824de" />
-        <option value="71cf0077-d6c7-448c-a131-74839c642875" />
+        <option value="e857f6b7-8d03-452a-9faa-890cb874023b" />
       </list>
     </option>
     <option name="sessionPaths">
       <map>
         <entry key="52f260dd-977a-44af-b6e8-3e015e5824de" value="/sessions/d1c12b74-1a5c-46e5-92c0-5474dea21281" />
-        <entry key="71cf0077-d6c7-448c-a131-74839c642875" value="/sessions/e7354d08-9b19-4b20-b08d-ba943c80b9fc" />
         <entry key="c489270a-d7a2-48f7-bec9-67bbded59de7" value="/sessions/fc75d1cb-4689-4422-971b-58e726a7361e" />
+        <entry key="e857f6b7-8d03-452a-9faa-890cb874023b" value="/sessions/66062c64-6737-40f7-bde0-0ae8e5359dc4" />
       </map>
     </option>
     <option name="sessionTitles">
       <map>
         <entry key="52f260dd-977a-44af-b6e8-3e015e5824de" value="Мобільний Kotlin-проєкт для портфоліо" />
-        <entry key="71cf0077-d6c7-448c-a131-74839c642875" value="JDK 25 і detekt" />
         <entry key="c489270a-d7a2-48f7-bec9-67bbded59de7" value="Flir One Pro на Honor 10" />
+        <entry key="e857f6b7-8d03-452a-9faa-890cb874023b" value="spotlessApply для ktlint" />
       </map>
     </option>
   </component>

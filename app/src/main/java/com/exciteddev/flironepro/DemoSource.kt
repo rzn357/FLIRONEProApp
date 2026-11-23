@@ -15,7 +15,7 @@ class DemoSource(private val dir: File, private val frameMs: Long = FRAME_MS, pr
     fun shutdown() {
         running = false
         interrupt()
-        runCatching { join(1000) }
+        runCatching { join(JOIN_MS) }
     }
 
     override fun run() {
@@ -41,7 +41,7 @@ class DemoSource(private val dir: File, private val frameMs: Long = FRAME_MS, pr
             val bytes = runCatching { f.readBytes() }.getOrNull() ?: continue
             val parser = FlirFrameParser({ frame ->
                 val raw = ThermalImage.decode(frame)
-                if (raw != null && !frame.isFfc && ThermalImage.stats(raw).let { it.max - it.min > 150 }) out.add(frame)
+                if (raw != null && !frame.isFfc && ThermalImage.stats(raw).let { it.max - it.min > MIN_SPREAD }) out.add(frame)
             })
             parser.feed(bytes, bytes.size)
         }
@@ -50,5 +50,9 @@ class DemoSource(private val dir: File, private val frameMs: Long = FRAME_MS, pr
 
     companion object {
         const val FRAME_MS = 200L
+        private const val JOIN_MS = 1000L
+
+        /** Frames whose raw values vary less than this are flat (shutter, lens cap) and are not worth replaying. */
+        private const val MIN_SPREAD = 150
     }
 }

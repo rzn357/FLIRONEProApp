@@ -13,14 +13,19 @@ object UsbReport {
 
     fun describe(manager: UsbManager, device: UsbDevice): String {
         val sb = StringBuilder()
+        val granted = manager.hasPermission(device)
+        appendSummary(sb, device, granted)
+        if (granted) appendDescriptors(sb, manager, device) else sb.appendLine("(descriptors are unavailable without permission)")
+        return sb.toString()
+    }
+
+    private fun appendSummary(sb: StringBuilder, device: UsbDevice, granted: Boolean) {
         val flir = device.vendorId == FLIR_VENDOR_ID
         sb.appendLine("=== ${device.deviceName}${if (flir) "   <-- FLIR" else ""} ===")
         sb.appendLine("VID:PID = ${UsbDescriptorParser.hex16(device.vendorId)}:${UsbDescriptorParser.hex16(device.productId)}")
         sb.appendLine(
             "class=${UsbDescriptorParser.className(device.deviceClass)} sub=${device.deviceSubclass} proto=${device.deviceProtocol}"
         )
-
-        val granted = manager.hasPermission(device)
         sb.appendLine("Access permission: ${if (granted) "yes" else "no"}")
 
         // Android provides the strings and the serial number only when permission is granted.
@@ -29,18 +34,14 @@ object UsbReport {
             sb.appendLine("Product:      ${device.productName}")
             sb.appendLine("Version:      ${device.version}")
         }
-
         sb.appendLine("Configurations (Android API): ${device.configurationCount}, interfaces of the current one: ${device.interfaceCount}")
+    }
 
-        if (!granted) {
-            sb.appendLine("(descriptors are unavailable without permission)")
-            return sb.toString()
-        }
-
+    private fun appendDescriptors(sb: StringBuilder, manager: UsbManager, device: UsbDevice) {
         val connection = manager.openDevice(device)
         if (connection == null) {
             sb.appendLine("!! openDevice() returned null")
-            return sb.toString()
+            return
         }
         try {
             sb.appendLine("Serial number: ${runCatching { connection.serial }.getOrNull()}")
@@ -56,6 +57,5 @@ object UsbReport {
         } finally {
             connection.close()
         }
-        return sb.toString()
     }
 }

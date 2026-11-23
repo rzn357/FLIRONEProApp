@@ -1,15 +1,27 @@
 package com.exciteddev.flironepro
 
-import java.util.zip.CRC32
+/**
+ * Framing shared by the camera's service messages and by our commands: a 16-byte header
+ * CC 01 00 00 | type (u32 LE) | payload length (u32 LE) | CRC32 of the first 12 bytes (u32 LE), then the payload.
+ */
+internal object ServiceFraming {
+    const val HEADER_SIZE = 16
+    const val TYPE_AT = 4
+    const val LENGTH_AT = 8
+    const val CRC_AT = 12
+
+    /** The CRC32 covers the header up to (not including) the CRC field itself. */
+    const val CRC_COVERS = CRC_AT
+    val MAGIC = byteArrayOf(0xCC.toByte(), 0x01, 0x00, 0x00)
+}
 
 /**
  * Parses the stream of the camera's service messages (bulk IN 0x81 / 0x83).
- * Each message: 16-byte header CC 01 00 00 | type (u32 LE) | length (u32 LE) | CRC32 of the first 12 bytes (u32 LE),
- * followed by a payload of the given length. Independent of how USB split the data into chunks.
+ * Each message: 16-byte header (see [ServiceFraming]) followed by a payload of the given length.
+ * Independent of how USB split the data into chunks.
  */
 class FlirMessageParser(private val onMessage: (type: Int, payload: ByteArray) -> Unit) {
-    private var buf = ByteArray(64 * 1024)
-    private var len = 0
+    private val stream = ByteStreamBuffer(INITIAL_CAPACITY)
 
     var messages = 0L
         private set
@@ -18,70 +30,64 @@ class FlirMessageParser(private val onMessage: (type: Int, payload: ByteArray) -
 
     fun feed(chunk: ByteArray, n: Int) {
         if (n <= 0) return
-        if (len + n > buf.size) {
-            var size = buf.size
-            while (size < len + n) size *= 2
-            buf = buf.copyOf(size)
-        }
-        System.arraycopy(chunk, 0, buf, len, n)
-        len += n
+        stream.append(chunk, n)
         process()
     }
 
     private fun process() {
-        var pos = 0
-        while (true) {
-            val m = indexOfMagic(pos)
-            if (m < 0) {
-                val keep = maxOf(pos, len - 3)
-                bytesSkipped += keep - pos
-                pos = keep
-                break
-            }
-            if (m > pos) {
-                bytesSkipped += m - pos
-                pos = m
-            }
-            if (len - pos < HEADER) break
+        stream.pos = 0
+        var more = true
+        while (more) more = step()
+        stream.discardConsumed()
+    }
 
-            val type = u32(pos + 4)
-            val plen = u32(pos + 8)
-            val crc = u32(pos + 12).toLong() and 0xFFFFFFFFL
-            val calc = CRC32().apply { update(buf, pos, 12) }.value
-            if (crc != calc || plen < 0 || plen > MAX_PAYLOAD) {
+    /** Deals with the data at the read position; false when more bytes have to arrive before anything else can be done. */
+    private fun step(): Boolean {
+        val magicAt = stream.indexOf(ServiceFraming.MAGIC, stream.pos)
+        if (magicAt < 0) {
+            val keep = maxOf(stream.pos, stream.length - (ServiceFraming.MAGIC.size - 1))
+            bytesSkipped += keep - stream.pos
+            stream.pos = keep
+            return false
+        }
+        bytesSkipped += magicAt - stream.pos
+        stream.pos = magicAt
+        return readMessage()
+    }
+
+    private fun readMessage(): Boolean {
+        if (stream.available < ServiceFraming.HEADER_SIZE) return false
+        val start = stream.pos
+        val payloadLength = stream.u32(start + ServiceFraming.LENGTH_AT)
+        return when {
+            !hasValidHeader(start, payloadLength) -> {
                 // not a header - keep searching
                 bytesSkipped++
-                pos++
-                continue
+                stream.pos++
+                true
             }
-            if (len - pos - HEADER < plen) break // the payload has not arrived yet
 
-            val payload = buf.copyOfRange(pos + HEADER, pos + HEADER + plen)
-            pos += HEADER + plen
-            messages++
-            onMessage(type, payload)
-        }
-        if (pos > 0) {
-            System.arraycopy(buf, pos, buf, 0, len - pos)
-            len -= pos
+            // The payload has not arrived yet.
+            stream.available - ServiceFraming.HEADER_SIZE < payloadLength -> false
+
+            else -> {
+                val payloadStart = start + ServiceFraming.HEADER_SIZE
+                val payload = stream.copyOf(payloadStart, payloadLength)
+                stream.pos = payloadStart + payloadLength
+                messages++
+                onMessage(stream.u32(start + ServiceFraming.TYPE_AT), payload)
+                true
+            }
         }
     }
 
-    private fun indexOfMagic(from: Int): Int {
-        var i = from
-        val end = len - 4
-        while (i <= end) {
-            if (buf[i] == 0xCC.toByte() && buf[i + 1] == 0x01.toByte() && buf[i + 2] == 0.toByte() && buf[i + 3] == 0.toByte()) return i
-            i++
-        }
-        return -1
+    private fun hasValidHeader(start: Int, payloadLength: Int): Boolean {
+        val crc = stream.u32(start + ServiceFraming.CRC_AT).toLong() and Bytes.U32_MASK
+        return payloadLength in 0..MAX_PAYLOAD && crc == stream.crc32(start, ServiceFraming.CRC_COVERS)
     }
-
-    private fun u32(o: Int): Int = (buf[o].toInt() and 0xFF) or ((buf[o + 1].toInt() and 0xFF) shl 8) or
-        ((buf[o + 2].toInt() and 0xFF) shl 16) or ((buf[o + 3].toInt() and 0xFF) shl 24)
 
     private companion object {
-        const val HEADER = 16
+        const val INITIAL_CAPACITY = 64 * 1024
         const val MAX_PAYLOAD = 16 * 1024 * 1024
     }
 }

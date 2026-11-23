@@ -5,7 +5,21 @@ style:
     maxLineLength: 140
     excludeCommentStatements: true
   MagicNumber:
-    excludes: ['**/test/**', '**/androidTest/**']
+    excludes:
+      - '**/test/**'
+      - '**/androidTest/**'
+      # Drawing and layout code: sizes in dp, colors, fractions of the canvas. There the numbers are the content itself, and a
+      # constant like PADDING_TOP = 12 would only hide them.
+      - '**/BatteryDrawable.kt'
+      - '**/OverlayPainter.kt'
+      - '**/ImageComposer.kt'
+      - '**/ThermalView.kt'
+      - '**/Palettes.kt'
+      - '**/SettingsPanel.kt'
+      - '**/SettingsWidgets.kt'
+      - '**/SettingsSections.kt'
+      # The developer self-test: reference sizes and expected values are written out on purpose.
+      - '**/SelfTest*.kt'
     ignoreNamedArgument: true
     ignoreExtensionFunctions: true
     ignorePropertyDeclaration: true

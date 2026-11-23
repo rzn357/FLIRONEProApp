@@ -1,11 +1,13 @@
 package com.exciteddev.flironepro
 
+import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -14,8 +16,20 @@ import java.util.Locale
 object MediaSaver {
     private const val PHOTO_DIR = "Pictures/FLIR ONE Pro"
     private const val VIDEO_DIR = "Movies/FLIR ONE Pro"
+    private const val JPEG_QUALITY = 95
 
     private fun stamp() = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+
+    /** Runs a MediaStore call; the failures that this storage can cause are passed to [onFailure] instead of crashing the app. */
+    private inline fun <T> mediaStoreCall(onFailure: (Exception) -> T, block: () -> T): T = try {
+        block()
+    } catch (e: IOException) {
+        onFailure(e)
+    } catch (e: SecurityException) {
+        onFailure(e)
+    } catch (e: IllegalArgumentException) {
+        onFailure(e)
+    }
 
     /** Saves a JPEG photo. Returns the file name, or null on failure. */
     fun savePhoto(context: Context, bitmap: Bitmap): String? {
@@ -28,17 +42,21 @@ object MediaSaver {
         }
         val resolver = context.contentResolver
         val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return null
-        return try {
-            resolver.openOutputStream(uri)?.use { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) } ?: error("no output stream")
+        return mediaStoreCall(onFailure = { discard(resolver, uri, "photo", it) }) {
+            val out = resolver.openOutputStream(uri) ?: throw IOException("no output stream")
+            out.use { bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }
             values.clear()
             values.put(MediaStore.Images.Media.IS_PENDING, 0)
             resolver.update(uri, values, null, null)
             name
-        } catch (e: Exception) {
-            DiagLog.log("Could not save the photo: $e")
-            runCatching { resolver.delete(uri, null, null) }
-            null
         }
+    }
+
+    /** Logs the failure and removes the half-written entry; always null. */
+    private fun discard(resolver: ContentResolver, uri: Uri, what: String, error: Exception): String? {
+        DiagLog.log("Could not save the $what: $error")
+        runCatching { resolver.delete(uri, null, null) }
+        return null
     }
 
     /** Destination for a video: an entry in MediaStore (the file stays "pending" until the video is finished). */
@@ -54,16 +72,17 @@ object MediaSaver {
         }
         val resolver = context.contentResolver
         val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: return null
-        val pfd = try {
-            resolver.openFileDescriptor(uri, "rw") // MediaMuxer needs read and write access
-        } catch (e: Exception) {
-            null
+        // MediaMuxer needs read and write access.
+        val pfd = mediaStoreCall(onFailure = { openFailed(it) }) {
+            resolver.openFileDescriptor(uri, "rw")
         }
-        if (pfd == null) {
-            runCatching { resolver.delete(uri, null, null) }
-            return null
-        }
-        return VideoTarget(uri, pfd, name)
+        if (pfd == null) runCatching { resolver.delete(uri, null, null) }
+        return pfd?.let { VideoTarget(uri, it, name) }
+    }
+
+    private fun openFailed(error: Exception): ParcelFileDescriptor? {
+        DiagLog.log("Could not open the video file: $error")
+        return null
     }
 
     /** Finishes the recording: makes the file visible in the gallery (keep) or deletes it. */

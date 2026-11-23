@@ -23,28 +23,26 @@ class FlirFrame(val data: ByteArray, val thermalSize: Int, val jpgSize: Int, val
 
     /** During the shutter calibration (FFC) the shutter is closed and the thermal image is temporarily invalid. */
     val isFfc: Boolean
-        get() {
-            if (!hasStatus || statusSize < 20) return false
-            val o = statusOffset.toInt() + 17
-            return data[o] == 'F'.code.toByte() && data[o + 1] == 'F'.code.toByte() && data[o + 2] == 'C'.code.toByte()
-        }
+        get() = hasStatus && statusSize >= FFC_MIN_STATUS && hasFfcTag()
+
+    private fun hasFfcTag(): Boolean {
+        val start = statusOffset.toInt() + FFC_TAG_OFFSET
+        return FFC_TAG.indices.all { data[start + it] == FFC_TAG[it] }
+    }
 
     /** The status as readable ASCII (non-printable characters replaced with '.'). */
-    fun statusText(max: Int = 200): String {
-        if (!hasStatus) return ""
-        val start = statusOffset.toInt()
-        val n = minOf(statusSize, max)
-        val sb = StringBuilder(n)
-        for (i in 0 until n) {
-            val c = data[start + i].toInt() and 0xFF
-            sb.append(if (c in 32..126) c.toChar() else '.')
-        }
-        return sb.toString()
-    }
+    fun statusText(max: Int = 200): String = if (hasStatus) Bytes.asciiText(data, statusOffset.toInt(), minOf(statusSize, max)) else ""
 
     fun jpegBytes(): ByteArray? = if (hasJpeg) data.copyOfRange(jpgOffset.toInt(), jpgOffset.toInt() + jpgSize) else null
 
     companion object {
         const val HEADER_SIZE = 28
+
+        /** The status text is shorter than this when it cannot carry the calibration tag. */
+        private const val FFC_MIN_STATUS = 20
+
+        /** Position of the "FFC" tag in the status text while the shutter is closed. */
+        private const val FFC_TAG_OFFSET = 17
+        private val FFC_TAG = "FFC".toByteArray(Charsets.US_ASCII)
     }
 }

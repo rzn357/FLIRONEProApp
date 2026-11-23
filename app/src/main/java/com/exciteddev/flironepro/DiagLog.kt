@@ -1,6 +1,7 @@
 package com.exciteddev.flironepro
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import java.io.File
 import java.text.SimpleDateFormat
@@ -28,5 +29,18 @@ object DiagLog {
     fun log(msg: String) {
         Log.i(TAG, msg)
         runCatching { file?.appendText("${fmt.format(Date())}  $msg\n") }
+    }
+}
+
+/** Writes a message to [DiagLog] at most once per [gapMs]; the messages in between are dropped. */
+class ThrottledLog(private val prefix: String, private val gapMs: Long) {
+    private var last = 0L
+
+    fun log(msg: String) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - last > gapMs) {
+            last = now
+            DiagLog.log("$prefix: $msg")
+        }
     }
 }

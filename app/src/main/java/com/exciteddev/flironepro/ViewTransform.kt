@@ -7,16 +7,19 @@ enum class DisplayMode {
     VISIBLE
 }
 
+/** The middle of a normalized (0..1) frame. */
+private const val MIDDLE = 0.5f
+
 /**
  * Alignment of the visible camera relative to the thermal one. Normalized thermal-frame coordinates (u,v in [0,1])
  * map to normalized visible-frame coordinates as u' = scale*(u-0.5) + 0.5 + dx.
  * scale < 1 means the thermal frame covers only the central part of the visible one.
  */
 class Alignment(val scale: Float = DEFAULT_SCALE, val dx: Float = DEFAULT_DX, val dy: Float = DEFAULT_DY) {
-    fun thermalToVisibleU(u: Float) = scale * (u - 0.5f) + 0.5f + dx
-    fun thermalToVisibleV(v: Float) = scale * (v - 0.5f) + 0.5f + dy
-    fun visibleToThermalU(u: Float) = (u - 0.5f - dx) / scale + 0.5f
-    fun visibleToThermalV(v: Float) = (v - 0.5f - dy) / scale + 0.5f
+    fun thermalToVisibleU(u: Float) = scale * (u - MIDDLE) + MIDDLE + dx
+    fun thermalToVisibleV(v: Float) = scale * (v - MIDDLE) + MIDDLE + dy
+    fun visibleToThermalU(u: Float) = (u - MIDDLE - dx) / scale + MIDDLE
+    fun visibleToThermalV(v: Float) = (v - MIDDLE - dy) / scale + MIDDLE
 
     fun copy(scale: Float = this.scale, dx: Float = this.dx, dy: Float = this.dy) = Alignment(scale, dx, dy)
 
@@ -38,6 +41,17 @@ object Orientation {
      */
     const val SENSOR_BASE = 90
 
+    const val QUARTER_TURN = 90
+    const val HALF_TURN = 180
+    const val THREE_QUARTER_TURN = 270
+    const val FULL_TURN = 360
+
+    /** The angle in degrees brought into 0 until 360. */
+    fun normalize(degrees: Int): Int = degrees.mod(FULL_TURN)
+
+    /** True if the rotation turns the picture on its side (a quarter or three quarters of a turn), swapping width and height. */
+    fun isSideways(rotation: Int): Boolean = rotation % HALF_TURN != 0
+
     /**
      * Effective clockwise rotation of the image.
      * @param auto compensate for the current screen rotation, so the picture stays upright in any phone orientation
@@ -46,7 +60,7 @@ object Orientation {
      */
     fun effective(auto: Boolean, offset: Int, displayRotation: Int): Int {
         val v = if (auto) SENSOR_BASE + offset - displayRotation else offset
-        return ((v % 360) + 360) % 360
+        return normalize(v)
     }
 }
 
@@ -71,8 +85,7 @@ class ViewTransform(
     val destH: Float
 
     init {
-        val rotated = rotation % 180 != 0
-        val aspect = if (rotated) 1f / contentAspect else contentAspect
+        val aspect = if (Orientation.isSideways(rotation)) 1f / contentAspect else contentAspect
         val viewIsWiderThanContent = viewW / viewH > aspect
         // Fit: limited by height when the view is wider; cover: the other way around.
         val limitByHeight = if (cover) !viewIsWiderThanContent else viewIsWiderThanContent
@@ -96,19 +109,19 @@ class ViewTransform(
     /** Content normalized coordinates -> normalized coordinates after mirroring and rotation. */
     private fun rotate(u: Float, v: Float): Pair<Float, Float> {
         val mu = if (mirror) 1f - u else u
-        return when (((rotation % 360) + 360) % 360) {
-            90 -> Pair(1f - v, mu)
-            180 -> Pair(1f - mu, 1f - v)
-            270 -> Pair(v, 1f - mu)
+        return when (Orientation.normalize(rotation)) {
+            Orientation.QUARTER_TURN -> Pair(1f - v, mu)
+            Orientation.HALF_TURN -> Pair(1f - mu, 1f - v)
+            Orientation.THREE_QUARTER_TURN -> Pair(v, 1f - mu)
             else -> Pair(mu, v)
         }
     }
 
     private fun unrotate(p: Float, q: Float): Pair<Float, Float> {
-        val (mu, v) = when (((rotation % 360) + 360) % 360) {
-            90 -> Pair(q, 1f - p)
-            180 -> Pair(1f - p, 1f - q)
-            270 -> Pair(1f - q, p)
+        val (mu, v) = when (Orientation.normalize(rotation)) {
+            Orientation.QUARTER_TURN -> Pair(q, 1f - p)
+            Orientation.HALF_TURN -> Pair(1f - p, 1f - q)
+            Orientation.THREE_QUARTER_TURN -> Pair(1f - q, p)
             else -> Pair(p, q)
         }
         return Pair(if (mirror) 1f - mu else mu, v)
@@ -132,4 +145,26 @@ class ViewTransform(
      */
     fun canStartDragAt(x: Float, y: Float, guard: Float): Boolean =
         x >= guard && x <= viewW - guard && y >= guard && y <= viewH - guard && containsPoint(x, y)
+
+    /**
+     * Fills [out] with the screen positions (x, y of each corner) of the content's corners: top-left, top-right, bottom-right,
+     * bottom-left, in the order of [sourceCorners].
+     */
+    fun destinationCorners(out: FloatArray) {
+        for (i in 0 until CORNER_COUNT) {
+            out[2 * i] = toViewX(UNIT_CORNERS[2 * i], UNIT_CORNERS[2 * i + 1])
+            out[2 * i + 1] = toViewY(UNIT_CORNERS[2 * i], UNIT_CORNERS[2 * i + 1])
+        }
+    }
+
+    companion object {
+        const val CORNER_COUNT = 4
+        const val CORNER_VALUES = CORNER_COUNT * 2
+        private val UNIT_CORNERS = floatArrayOf(0f, 0f, 1f, 0f, 1f, 1f, 0f, 1f)
+
+        /** Fills [out] with the corners of a bitmap of the given size (x, y; top-left, top-right, bottom-right, bottom-left). */
+        fun sourceCorners(w: Float, h: Float, out: FloatArray) {
+            floatArrayOf(0f, 0f, w, 0f, w, h, 0f, h).copyInto(out)
+        }
+    }
 }

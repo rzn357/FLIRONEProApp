@@ -37,6 +37,7 @@ class VideoRecorder(private val context: Context, val width: Int, val height: In
     val isRecording: Boolean get() = running
     fun elapsedMs(): Long = if (running) SystemClock.elapsedRealtime() - startedAt else 0L
 
+    @Suppress("TooGenericExceptionCaught") // MediaCodec / MediaMuxer fail with many unchecked exceptions; a failed start must not crash
     fun start(): Boolean {
         return try {
             val fd = if (debugFile != null) {
@@ -52,8 +53,8 @@ class VideoRecorder(private val context: Context, val width: Int, val height: In
             }
             val format = MediaFormat.createVideoFormat(MIME, width, height).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE, 3_000_000)
-                setInteger(MediaFormat.KEY_FRAME_RATE, 10)
+                setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE)
+                setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             }
             val c = MediaCodec.createEncoderByType(MIME)
@@ -76,6 +77,7 @@ class VideoRecorder(private val context: Context, val width: Int, val height: In
 
     /** Draws one frame into the video. Call from the processing thread. */
     @Synchronized
+    @Suppress("TooGenericExceptionCaught") // a drawing or surface error in one frame must not stop the recording thread
     fun encode(draw: (Canvas) -> Unit) {
         if (!running) return
         val s = surface ?: return
@@ -99,7 +101,7 @@ class VideoRecorder(private val context: Context, val width: Int, val height: In
             running = false
             runCatching { codec?.signalEndOfInputStream() }
         }
-        drainThread?.join(4000)
+        drainThread?.join(DRAIN_JOIN_MS)
         val ok = muxerStarted && framesEncoded > 0
         val name = fileName
         release(keep = ok)
@@ -107,39 +109,49 @@ class VideoRecorder(private val context: Context, val width: Int, val height: In
         return if (ok) name else null
     }
 
+    /** Moves the encoded data from the codec to the muxer until the end of the stream. */
+    @Suppress("TooGenericExceptionCaught") // the codecs of different phones fail with a variety of unchecked exceptions
     private fun drain(c: MediaCodec) {
         val info = MediaCodec.BufferInfo()
         try {
-            while (true) {
-                val idx = c.dequeueOutputBuffer(info, 10_000)
-                when {
-                    idx == MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
-
-                    idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                        val m = muxer ?: return
-                        m.addTrack(c.outputFormat)
-                        m.start()
-                        muxerStarted = true
-                    }
-
-                    idx >= 0 -> {
-                        val buf = c.getOutputBuffer(idx)
-                        if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) info.size = 0
-                        if (info.size > 0 && muxerStarted && buf != null) {
-                            if (firstPtsUs < 0) firstPtsUs = info.presentationTimeUs
-                            info.presentationTimeUs -= firstPtsUs
-                            buf.position(info.offset)
-                            buf.limit(info.offset + info.size)
-                            muxer?.writeSampleData(0, buf, info)
-                        }
-                        c.releaseOutputBuffer(idx, false)
-                        if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) return
-                    }
-                }
-            }
+            var finished = false
+            while (!finished) finished = drainOnce(c, info)
         } catch (e: Exception) {
             DiagLog.log("Video recording error (codec): $e")
         }
+    }
+
+    /** Handles one output event of the codec; true when the end of the stream was reached (or there is no muxer any more). */
+    private fun drainOnce(c: MediaCodec, info: MediaCodec.BufferInfo): Boolean {
+        val idx = c.dequeueOutputBuffer(info, DEQUEUE_TIMEOUT_US)
+        return when {
+            idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> !startMuxer(c)
+            idx >= 0 -> writeOutput(c, idx, info)
+            else -> false
+        }
+    }
+
+    private fun startMuxer(c: MediaCodec): Boolean {
+        val m = muxer ?: return false
+        m.addTrack(c.outputFormat)
+        m.start()
+        muxerStarted = true
+        return true
+    }
+
+    /** Passes one encoded buffer to the muxer; true if it was the last one. */
+    private fun writeOutput(c: MediaCodec, idx: Int, info: MediaCodec.BufferInfo): Boolean {
+        val buf = c.getOutputBuffer(idx)
+        if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) info.size = 0
+        if (info.size > 0 && muxerStarted && buf != null) {
+            if (firstPtsUs < 0) firstPtsUs = info.presentationTimeUs
+            info.presentationTimeUs -= firstPtsUs
+            buf.position(info.offset)
+            buf.limit(info.offset + info.size)
+            muxer?.writeSampleData(0, buf, info)
+        }
+        c.releaseOutputBuffer(idx, false)
+        return info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
     }
 
     private fun release(keep: Boolean) {
@@ -161,5 +173,9 @@ class VideoRecorder(private val context: Context, val width: Int, val height: In
 
     private companion object {
         const val MIME = MediaFormat.MIMETYPE_VIDEO_AVC
+        const val BIT_RATE = 3_000_000
+        const val FRAME_RATE = 10
+        const val DRAIN_JOIN_MS = 4000L
+        const val DEQUEUE_TIMEOUT_US = 10_000L
     }
 }

@@ -50,8 +50,8 @@ class ThermalView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val emptyPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFB0B0B0.toInt() }
     private val matrix = Matrix()
-    private val srcPts = FloatArray(8)
-    private val dstPts = FloatArray(8)
+    private val srcPts = FloatArray(ViewTransform.CORNER_VALUES)
+    private val dstPts = FloatArray(ViewTransform.CORNER_VALUES)
 
     private val pending = AtomicReference<Pair<Bitmap, OverlayState>?>(null)
     private var bitmap: Bitmap? = null
@@ -73,9 +73,9 @@ class ThermalView @JvmOverloads constructor(context: Context, attrs: AttributeSe
 
     /** Current picture state (used for snapshots). */
     fun currentFrame(): Pair<Bitmap, OverlayState>? {
-        val b = bitmap ?: return null
-        val o = overlay ?: return null
-        return Pair(b, o)
+        val b = bitmap
+        val o = overlay
+        return if (b != null && o != null) Pair(b, o) else null
     }
 
     /** Forget the last picture (the camera went away) so the empty state with its message is shown again. */
@@ -112,20 +112,9 @@ class ThermalView @JvmOverloads constructor(context: Context, attrs: AttributeSe
     }
 
     private fun fillMatrix(t: ViewTransform, bm: Bitmap) {
-        srcPts[0] = 0f
-        srcPts[1] = 0f
-        srcPts[2] = bm.width.toFloat()
-        srcPts[3] = 0f
-        srcPts[4] = bm.width.toFloat()
-        srcPts[5] = bm.height.toFloat()
-        srcPts[6] = 0f
-        srcPts[7] = bm.height.toFloat()
-        val corners = arrayOf(floatArrayOf(0f, 0f), floatArrayOf(1f, 0f), floatArrayOf(1f, 1f), floatArrayOf(0f, 1f))
-        for (i in 0 until 4) {
-            dstPts[2 * i] = t.toViewX(corners[i][0], corners[i][1])
-            dstPts[2 * i + 1] = t.toViewY(corners[i][0], corners[i][1])
-        }
-        matrix.setPolyToPoly(srcPts, 0, dstPts, 0, 4)
+        ViewTransform.sourceCorners(bm.width.toFloat(), bm.height.toFloat(), srcPts)
+        t.destinationCorners(dstPts)
+        matrix.setPolyToPoly(srcPts, 0, dstPts, 0, ViewTransform.CORNER_COUNT)
     }
 
     /** Empty state: a centered, wrapped message (e.g. "Camera not found"). */

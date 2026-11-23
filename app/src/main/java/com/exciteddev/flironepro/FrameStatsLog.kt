@@ -22,7 +22,7 @@ class FrameStatsLog(context: Context) {
             w.write(line)
             w.newLine()
             val now = SystemClock.elapsedRealtime()
-            if (now - lastFlush > 2000) {
+            if (now - lastFlush > FLUSH_GAP_MS) {
                 w.flush()
                 lastFlush = now
             }
@@ -52,6 +52,7 @@ class FrameStatsLog(context: Context) {
 
     companion object {
         private const val MAX_BYTES = 8_000_000L
+        private const val FLUSH_GAP_MS = 2000L
         const val HEADER = "wall,frame,ffc,ffcState,shutterK,rawMin,rawMax,rawMean,rawCenter," +
             "tw20,tw21,tw22,tw23,tw24,tw25,tw26,tw27,tw28,tw29,tw30,tw31,tCenterC,tMinC,tMaxC,anchorRaw"
     }

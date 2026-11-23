@@ -160,7 +160,7 @@ class FlirFrameTest {
         put(241, 3, 3138)
         put(242, 79, 0x1234)
         val (frames, _) = collect(4096, buildFrame(t, ByteArray(10), status(false)))
-        val tele = ThermalImage.telemetry(frames[0])!!
+        val tele = ThermalTelemetry.read(frames[0])!!
         assertEquals(240, tele.size)
         assertEquals(14, tele[0])
         assertEquals(3138, tele[83])
@@ -172,7 +172,7 @@ class FlirFrameTest {
     @Test
     fun telemetryMissingForShortThermalBlock() {
         val (frames, _) = collect(4096, buildFrame(layoutAThermal(), ByteArray(10), status(false)))
-        assertNull(ThermalImage.telemetry(frames[0]))
+        assertNull(ThermalTelemetry.read(frames[0]))
     }
 
     @Test

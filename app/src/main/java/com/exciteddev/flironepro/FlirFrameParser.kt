@@ -5,8 +5,7 @@ package com.exciteddev.flironepro
  * it looks for the magic bytes, reads the size and waits until the frame is complete.
  */
 class FlirFrameParser(private val onFrame: (FlirFrame) -> Unit, private val onEvent: (String) -> Unit = {}) {
-    private var buf = ByteArray(512 * 1024)
-    private var len = 0
+    private val stream = ByteStreamBuffer(INITIAL_CAPACITY)
 
     var framesParsed = 0L
         private set
@@ -17,88 +16,95 @@ class FlirFrameParser(private val onFrame: (FlirFrame) -> Unit, private val onEv
 
     fun feed(chunk: ByteArray, n: Int) {
         if (n <= 0) return
-        ensureCapacity(len + n)
-        System.arraycopy(chunk, 0, buf, len, n)
-        len += n
+        stream.append(chunk, n)
         process()
     }
 
     fun reset() {
-        len = 0
+        stream.clear()
     }
 
     private fun process() {
-        var pos = 0
-        while (true) {
-            val m = indexOfMagic(pos)
-            if (m < 0) {
-                // The magic bytes may begin at a chunk boundary - keep the last 3 bytes.
-                val keep = maxOf(pos, len - 3)
-                if (keep > pos) {
-                    bytesSkipped += keep - pos
-                    if (keep - pos > 0 && len - pos > 3) onEvent("No magic bytes, skipped ${keep - pos} bytes")
-                }
-                pos = keep
-                break
-            }
-            if (m > pos) {
-                resyncs++
-                bytesSkipped += m - pos
-                onEvent("Lost synchronization: skipped ${m - pos} bytes before the magic bytes")
-                pos = m
-            }
-            if (len - pos < HEADER_READ) break
+        stream.pos = 0
+        var more = true
+        while (more) more = step()
+        stream.discardConsumed()
+    }
 
-            val frameSize = u32(pos + 8)
-            val total = frameSize.toLong() + FlirFrame.HEADER_SIZE
-            if (frameSize < 0 || total > MAX_FRAME) {
+    /** Deals with the data at the read position; false when more bytes have to arrive before anything else can be done. */
+    private fun step(): Boolean {
+        val magicAt = stream.indexOf(MAGIC, stream.pos)
+        if (magicAt < 0) {
+            skipWithoutMagic()
+            return false
+        }
+        if (magicAt > stream.pos) resync(magicAt)
+        return readFrame()
+    }
+
+    private fun skipWithoutMagic() {
+        // The magic bytes may begin at a chunk boundary - keep the last bytes of the buffer.
+        val keep = maxOf(stream.pos, stream.length - (MAGIC.size - 1))
+        val skipped = keep - stream.pos
+        if (skipped > 0) {
+            bytesSkipped += skipped
+            if (stream.available > MAGIC.size - 1) onEvent("No magic bytes, skipped $skipped bytes")
+        }
+        stream.pos = keep
+    }
+
+    private fun resync(magicAt: Int) {
+        val skipped = magicAt - stream.pos
+        resyncs++
+        bytesSkipped += skipped
+        onEvent("Lost synchronization: skipped $skipped bytes before the magic bytes")
+        stream.pos = magicAt
+    }
+
+    private fun readFrame(): Boolean {
+        if (stream.available < HEADER_READ) return false
+        val frameSize = stream.u32(stream.pos + FRAME_SIZE_AT)
+        val total = frameSize.toLong() + FlirFrame.HEADER_SIZE
+        return when {
+            frameSize < 0 || total > MAX_FRAME -> {
                 resyncs++
                 onEvent("Invalid header: FrameSize=$frameSize, skipping a byte")
                 bytesSkipped++
-                pos += 1
-                continue
+                stream.pos++
+                true
             }
-            if (len - pos < total) break // the frame has not fully arrived yet
 
-            val start = pos
-            val data = buf.copyOfRange(start, start + total.toInt())
-            val frame = FlirFrame(data, u32(start + 12), u32(start + 16), u32(start + 20))
-            pos = start + total.toInt()
-            framesParsed++
-            onFrame(frame)
-        }
-        if (pos > 0) {
-            System.arraycopy(buf, pos, buf, 0, len - pos)
-            len -= pos
+            // The frame has not fully arrived yet.
+            stream.available < total -> false
+
+            else -> {
+                emitFrame(total.toInt())
+                true
+            }
         }
     }
 
-    private fun indexOfMagic(from: Int): Int {
-        var i = from
-        val end = len - 4
-        while (i <= end) {
-            if (buf[i] == M0 && buf[i + 1] == M1 && buf[i + 2] == 0.toByte() && buf[i + 3] == 0.toByte()) return i
-            i++
-        }
-        return -1
-    }
-
-    private fun u32(o: Int): Int = (buf[o].toInt() and 0xFF) or
-        ((buf[o + 1].toInt() and 0xFF) shl 8) or
-        ((buf[o + 2].toInt() and 0xFF) shl 16) or
-        ((buf[o + 3].toInt() and 0xFF) shl 24)
-
-    private fun ensureCapacity(need: Int) {
-        if (need <= buf.size) return
-        var size = buf.size
-        while (size < need) size *= 2
-        buf = buf.copyOf(size)
+    private fun emitFrame(total: Int) {
+        val start = stream.pos
+        val frame = FlirFrame(
+            stream.copyOf(start, total),
+            stream.u32(start + THERMAL_SIZE_AT),
+            stream.u32(start + JPG_SIZE_AT),
+            stream.u32(start + STATUS_SIZE_AT)
+        )
+        stream.pos = start + total
+        framesParsed++
+        onFrame(frame)
     }
 
     private companion object {
+        const val INITIAL_CAPACITY = 512 * 1024
+        const val FRAME_SIZE_AT = 8
+        const val THERMAL_SIZE_AT = 12
+        const val JPG_SIZE_AT = 16
+        const val STATUS_SIZE_AT = 20
         const val HEADER_READ = 24
         const val MAX_FRAME = 4L * 1024 * 1024
-        const val M0 = 0xEF.toByte()
-        const val M1 = 0xBE.toByte()
+        val MAGIC = byteArrayOf(0xEF.toByte(), 0xBE.toByte(), 0, 0)
     }
 }
