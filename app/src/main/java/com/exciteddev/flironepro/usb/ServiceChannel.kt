@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
  * What arrives on the camera's service endpoints (0x81 / 0x83): parses the messages, hands JSON ones to the listener, keeps the
  * replies that someone may wait for, and (during the file-reading experiment) records the raw bytes into a file.
  */
-internal class ServiceChannel(private val onJson: (String) -> Unit) {
+internal class ServiceChannel(private val now: () -> Long = SystemClock::elapsedRealtime, private val onJson: (String) -> Unit) {
     /** JSON messages (except battery reports) for whoever waits for a reply to a command. */
     val replies = LinkedBlockingQueue<String>()
 
@@ -43,7 +43,7 @@ internal class ServiceChannel(private val onJson: (String) -> Unit) {
     }
 
     fun markData() {
-        lastDataAt = SystemClock.elapsedRealtime()
+        lastDataAt = now()
     }
 
     private fun handle(type: Int, payload: ByteArray, log: MessageLog) {
@@ -63,7 +63,7 @@ internal class ServiceChannel(private val onJson: (String) -> Unit) {
     }
 
     fun startCapture(out: OutputStream) {
-        captureStart = SystemClock.elapsedRealtime()
+        captureStart = now()
         messageCounts.clear()
         replies.clear()
         capture = out
@@ -75,7 +75,7 @@ internal class ServiceChannel(private val onJson: (String) -> Unit) {
 
     fun record(epAddress: Int, data: ByteArray, n: Int) {
         val out = capture ?: return
-        val t = (SystemClock.elapsedRealtime() - captureStart).toInt()
+        val t = (now() - captureStart).toInt()
         synchronized(out) {
             runCatching {
                 out.write(epAddress)

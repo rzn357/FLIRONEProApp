@@ -37,6 +37,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    testOptions {
+        // android.jar in unit tests throws on every call; the tests of the USB and pipeline code only need Log and SystemClock to be harmless.
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -48,6 +52,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.material)
+    testImplementation(testFixtures(project(":protocol")))
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }

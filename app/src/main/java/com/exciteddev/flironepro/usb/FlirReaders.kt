@@ -1,7 +1,5 @@
 package com.exciteddev.flironepro.usb
 
-import android.hardware.usb.UsbDeviceConnection
-import android.hardware.usb.UsbEndpoint
 import android.os.SystemClock
 import com.exciteddev.flironepro.debug.DiagLog
 import com.exciteddev.flironepro.protocol.FlirFrameParser
@@ -18,12 +16,12 @@ private const val FAST_FAILURE_MS = 20
  * considered lost and [onLost] is called.
  */
 internal class FrameReader(
-    private val conn: UsbDeviceConnection,
-    private val ep: UsbEndpoint,
+    private val link: UsbLink,
     private val parser: FlirFrameParser,
     private val isRunning: () -> Boolean,
     private val onLost: () -> Unit,
-    private val onState: (String) -> Unit
+    private val onState: (String) -> Unit,
+    private val now: () -> Long = SystemClock::elapsedRealtime
 ) {
     @Volatile var chunks = 0L
         private set
@@ -35,8 +33,7 @@ internal class FrameReader(
         private set
 
     /** What the loop has seen since the last chunk of data. */
-    private class Health {
-        var lastData = SystemClock.elapsedRealtime()
+    private class Health(var lastData: Long) {
         var loggedChunks = 0
         var consecutiveErrors = 0
         var fastFailures = 0
@@ -44,11 +41,11 @@ internal class FrameReader(
 
     fun run() {
         val buf = ByteArray(CHUNK)
-        val health = Health()
+        val health = Health(now())
         while (isRunning()) {
-            val t0 = SystemClock.elapsedRealtime()
-            val n = conn.bulkTransfer(ep, buf, buf.size, READ_TIMEOUT_MS)
-            val duration = SystemClock.elapsedRealtime() - t0
+            val t0 = now()
+            val n = link.bulkTransfer(FlirUsb.EP_FRAMES, buf, buf.size, READ_TIMEOUT_MS)
+            val duration = now() - t0
             if (n > 0) {
                 onChunk(buf, n, health)
             } else if (onFailedRead(n, duration, health)) {
@@ -62,7 +59,7 @@ internal class FrameReader(
         bytes += n
         health.consecutiveErrors = 0
         health.fastFailures = 0
-        health.lastData = SystemClock.elapsedRealtime()
+        health.lastData = now()
         if (health.loggedChunks < LOGGED_CHUNKS) {
             health.loggedChunks++
             DiagLog.log("EP85 chunk #$chunks: $n bytes, start: ${UsbDescriptorParser.hex(buf, 0, minOf(n, PREVIEW_BYTES))}")
@@ -88,7 +85,7 @@ internal class FrameReader(
     private fun logSilence(n: Int, health: Health) {
         val errors = health.consecutiveErrors
         if (errors == 1 || errors % LOG_EVERY == 0) {
-            val silent = SystemClock.elapsedRealtime() - health.lastData
+            val silent = now() - health.lastData
             DiagLog.log("EP85 bulkTransfer=$n (timeout), in a row=$errors, without data $silent ms")
         }
         if (errors == SILENCE_WARNING_AT) onState("No data from the camera for ~3 s")
@@ -110,24 +107,25 @@ internal class FrameReader(
  * the capture (during the experiment), the parsed messages are handled by the [ServiceChannel].
  */
 internal class ServiceReader(
-    private val conn: UsbDeviceConnection,
-    private val ep: UsbEndpoint,
+    private val link: UsbLink,
+    private val endpoint: Int,
     private val channel: ServiceChannel,
-    private val isRunning: () -> Boolean
+    private val isRunning: () -> Boolean,
+    private val now: () -> Long = SystemClock::elapsedRealtime
 ) {
     fun run() {
         val buf = ByteArray(CHUNK)
-        val parser = channel.parserFor(ep.address)
+        val parser = channel.parserFor(endpoint)
         var fastFailures = 0
         while (isRunning()) {
-            val t0 = SystemClock.elapsedRealtime()
-            val n = conn.bulkTransfer(ep, buf, buf.size, READ_TIMEOUT_MS)
+            val t0 = now()
+            val n = link.bulkTransfer(endpoint, buf, buf.size, READ_TIMEOUT_MS)
             if (n > 0) {
                 fastFailures = 0
-                if (ep.address == FlirUsb.EP_SERVICE_B) channel.markData()
-                channel.record(ep.address, buf, n)
+                if (endpoint == FlirUsb.EP_SERVICE_B) channel.markData()
+                channel.record(endpoint, buf, n)
                 parser.feed(buf, n)
-            } else if (SystemClock.elapsedRealtime() - t0 < FAST_FAILURE_MS) {
+            } else if (now() - t0 < FAST_FAILURE_MS) {
                 // Immediate error (not a timeout): do not spin while the frame reader decides the connection is lost.
                 if (++fastFailures > BACKOFF_AFTER_FAILURES) Thread.sleep(BACKOFF_MS)
             } else {

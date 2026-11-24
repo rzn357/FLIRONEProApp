@@ -14,6 +14,7 @@ import androidx.core.content.IntentCompat
 import com.exciteddev.flironepro.R
 import com.exciteddev.flironepro.debug.DiagLog
 import com.exciteddev.flironepro.pipeline.StreamPipeline
+import com.exciteddev.flironepro.pipeline.startCamera
 import com.exciteddev.flironepro.pipeline.stopRecording
 import com.exciteddev.flironepro.usb.UsbReport
 

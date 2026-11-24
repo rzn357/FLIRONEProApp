@@ -112,6 +112,33 @@ private fun pixelCenter(i: Int, size: Int): Float = (i + PIXEL_CENTER) / size
 
 private const val PIXEL_CENTER = 0.5f
 
+/** What the pipeline and the screen need from the frame processing; the tests of the pipeline replace the real one. */
+interface FrameProcessing {
+    /** The video encoder that gets every picture while a video is being recorded; null when none is. */
+    var recorder: VideoRecorder?
+
+    /** Called (on the processing thread) when a photo was saved. */
+    var onPhotoSaved: ((String?) -> Unit)?
+
+    /** The texts of the overlays (they change with the language of the screen). */
+    var overlayTexts: UiTexts
+
+    /** The readings under the crosshair of the last frames (for the temperature calibration). */
+    val calibration: CalibrationRing
+
+    fun start()
+
+    /** Hands over the newest frame; older ones that were not processed yet are dropped. */
+    fun submit(s: FrameSample)
+
+    fun requestPhoto()
+
+    /** Renders the current picture into a bitmap (diagnostic snapshots). */
+    fun renderSnapshot(w: Int, h: Int): Bitmap?
+
+    fun shutdown()
+}
+
 /**
  * Render thread: takes the newest frame, composes the picture for the current mode (thermal / visible / MSX), computes the
  * temperatures under the crosshair and at the markers, hands everything to the screen and, if requested, to the video
@@ -123,14 +150,14 @@ class FrameProcessor(
     private val radiometry: Radiometry,
     private val view: PictureSink,
     texts: UiTexts
-) : Thread("flir-render") {
+) : Thread("flir-render"),
+    FrameProcessing {
 
-    @Volatile var recorder: VideoRecorder? = null
+    @Volatile override var recorder: VideoRecorder? = null
 
-    @Volatile var onPhotoSaved: ((String?) -> Unit)? = null
+    @Volatile override var onPhotoSaved: ((String?) -> Unit)? = null
 
-    /** The readings under the crosshair of the last frames (for the temperature calibration). */
-    val calibration = CalibrationRing()
+    override val calibration = CalibrationRing()
 
     @Volatile private var photoRequested = false
 
@@ -156,7 +183,13 @@ class FrameProcessor(
     private val decodeOptsFull = BitmapFactory.Options().apply { inSampleSize = 1 }
 
     /** Draws photos, video and snapshots; the screen changes its texts when the language changes. */
-    val renderer = PictureRenderer(settings, texts)
+    private val renderer = PictureRenderer(settings, texts)
+
+    override var overlayTexts: UiTexts
+        get() = renderer.texts
+        set(value) {
+            renderer.texts = value
+        }
     private val luts = LutCache()
     private val saver = Executors.newSingleThreadExecutor()
 
@@ -164,18 +197,18 @@ class FrameProcessor(
     private var timeMax = 0L
     private var timeCount = 0
 
-    fun submit(s: FrameSample) {
+    override fun submit(s: FrameSample) {
         synchronized(lock) {
             latest = s
             lock.notifyAll()
         }
     }
 
-    fun requestPhoto() {
+    override fun requestPhoto() {
         photoRequested = true
     }
 
-    fun shutdown() {
+    override fun shutdown() {
         running = false
         synchronized(lock) { lock.notifyAll() }
         runCatching { join(JOIN_MS) }
@@ -320,8 +353,9 @@ class FrameProcessor(
         }
     }
 
-    /** Renders the current picture into a bitmap (diagnostic snapshots). */
-    fun renderSnapshot(w: Int, h: Int): Bitmap? = view.currentFrame()?.let { (bitmap, overlay) -> renderer.render(w, h, bitmap, overlay) }
+    override fun renderSnapshot(w: Int, h: Int): Bitmap? = view.currentFrame()?.let { (bitmap, overlay) ->
+        renderer.render(w, h, bitmap, overlay)
+    }
 
     private companion object {
         const val PHOTO_W = 960

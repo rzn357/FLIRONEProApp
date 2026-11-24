@@ -16,19 +16,21 @@ import java.util.Locale
 
 /**
  * What happens to every frame on the thread that delivers it (USB or demo): the cheap decoding, the shutter-calibration
- * bookkeeping, the radiometric anchor and the statistics log. The heavy work is left to the [FrameProcessor].
+ * bookkeeping, the radiometric anchor and the statistics log. The heavy work is left to the [FrameProcessing].
  * One instance serves one camera (or demo) session.
  *
  * @param statsLog where the per-frame statistics go (null: none, as in the demo)
  * @param live false for the demo: its frames neither feed the temperature model nor the statistics
  * @param fixedFpaK the sensor temperature to use instead of the one in the telemetry (the demo's recorded value)
+ * @param clock the time in milliseconds (the tests replace it)
  */
 class FrameIntake(
     private val radiometry: Radiometry,
-    private val processor: FrameProcessor,
+    private val processor: FrameProcessing,
     private val statsLog: FrameStatsLog?,
     private val live: Boolean,
-    private val fixedFpaK: Double?
+    private val fixedFpaK: Double?,
+    private val clock: () -> Long = SystemClock::elapsedRealtime
 ) {
     val ffc = FfcTracker()
     private val fpsMeter = FpsMeter()
@@ -41,7 +43,7 @@ class FrameIntake(
 
     fun handle(frame: FlirFrame) {
         frameCount++
-        val now = SystemClock.elapsedRealtime()
+        val now = clock()
         fpsMeter.onFrame(now)
 
         val raw = ThermalImage.decode(frame, IntArray(ThermalImage.W * ThermalImage.H))

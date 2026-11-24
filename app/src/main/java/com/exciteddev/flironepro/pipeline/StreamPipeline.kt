@@ -3,6 +3,7 @@ package com.exciteddev.flironepro.pipeline
 import android.content.Context
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
+import android.os.SystemClock
 import com.exciteddev.flironepro.debug.DiagLog
 import com.exciteddev.flironepro.debug.FrameStatsLog
 import com.exciteddev.flironepro.protocol.BatteryState
@@ -13,7 +14,14 @@ import com.exciteddev.flironepro.render.UiTexts
 import com.exciteddev.flironepro.render.overlayTexts
 import com.exciteddev.flironepro.settings.AppSettings
 import com.exciteddev.flironepro.usb.FlirCamera
+import com.exciteddev.flironepro.usb.UsbOpener
+import com.exciteddev.flironepro.usb.androidOpener
 import kotlinx.coroutines.CoroutineScope
+
+/** Makes the frame processor of a session (the tests make a fake one). */
+internal fun interface ProcessorFactory {
+    fun create(radiometry: Radiometry, view: PictureSink, texts: UiTexts): FrameProcessing
+}
 
 /**
  * The data side of the live screen: the camera (or the demo player), the frame processor, the radiometric model and the
@@ -25,9 +33,28 @@ import kotlinx.coroutines.CoroutineScope
  *
  * [scope] runs the work that has to be finished in the background whatever happens to the screen (closing the video file); its
  * jobs must not be cancelled half way, so it must outlive the stream.
+ *
+ * The processors, the first overlay texts and the clock are what the tests replace, to run the pipeline without a screen, a
+ * render thread or a camera.
  */
-class StreamPipeline(private val context: Context, private val settings: AppSettings, internal val scope: CoroutineScope) :
-    FlirCamera.Listener {
+class StreamPipeline internal constructor(
+    private val context: Context,
+    private val settings: AppSettings,
+    internal val scope: CoroutineScope,
+    private val processors: ProcessorFactory,
+    initialTexts: UiTexts,
+    private val clock: () -> Long = SystemClock::elapsedRealtime
+) : FlirCamera.Listener {
+
+    constructor(context: Context, settings: AppSettings, scope: CoroutineScope) : this(
+        context,
+        settings,
+        scope,
+        ProcessorFactory { radiometry, view, texts ->
+            FrameProcessor(context.applicationContext, settings, radiometry, view, texts)
+        },
+        context.overlayTexts()
+    )
 
     /** Called (on the processing thread) when a photo was saved: the file name, or null if saving failed. */
     var onPhotoSaved: (String?) -> Unit = {}
@@ -41,7 +68,7 @@ class StreamPipeline(private val context: Context, private val settings: AppSett
     var radiometry = Radiometry().also { settings.applyTo(it) }
         private set
 
-    @Volatile var processor: FrameProcessor? = null
+    @Volatile var processor: FrameProcessing? = null
         private set
 
     @Volatile var camera: FlirCamera? = null
@@ -65,26 +92,26 @@ class StreamPipeline(private val context: Context, private val settings: AppSett
     private val sink = DetachableSink()
 
     /** The texts of the overlays in the language of the attached screen. */
-    @Volatile private var texts: UiTexts = context.overlayTexts()
+    @Volatile private var texts: UiTexts = initialTexts
 
     val frameCount: Int get() = intake?.frameCount ?: 0
 
     /** Shows the pictures in [picture], with the overlay [overlayTexts] (they change with the language of the screen). */
     fun attach(picture: PictureSink, overlayTexts: UiTexts) {
         texts = overlayTexts
-        processor?.renderer?.texts = overlayTexts
+        processor?.overlayTexts = overlayTexts
         sink.attach(picture)
     }
 
     /** Stops showing the pictures in [picture] (the screen is gone); the stream itself goes on. */
     fun detach(picture: PictureSink) = sink.detach(picture)
 
-    /** Starts reading the camera; false if it could not be started. */
-    fun startCamera(manager: UsbManager, device: UsbDevice): Boolean {
+    /** Starts reading the camera behind [opener], which is called [name] in the log; false if it could not be started. */
+    internal fun startCamera(opener: UsbOpener, name: String): Boolean {
         if (statsLog == null) statsLog = FrameStatsLog(context)
         beginSession(live = true, fixedFpaK = null)
-        DiagLog.log("=== Starting the stream (${device.deviceName}) ===")
-        val cam = FlirCamera(manager, device, this)
+        DiagLog.log("=== Starting the stream ($name) ===")
+        val cam = FlirCamera(opener, this, clock)
         camera = cam
         val started = cam.start()
         if (!started) {
@@ -140,11 +167,11 @@ class StreamPipeline(private val context: Context, private val settings: AppSett
             }
         }
         sink.clear()
-        val newProcessor = FrameProcessor(context.applicationContext, settings, radiometry, sink, texts)
+        val newProcessor = processors.create(radiometry, sink, texts)
         newProcessor.onPhotoSaved = { name -> onPhotoSaved(name) }
         newProcessor.start()
         processor = newProcessor
-        intake = FrameIntake(radiometry, newProcessor, if (live) statsLog else null, live, fixedFpaK)
+        intake = FrameIntake(radiometry, newProcessor, if (live) statsLog else null, live, fixedFpaK, clock)
     }
 
     override fun onFrame(frame: FlirFrame) {
@@ -170,3 +197,7 @@ class StreamPipeline(private val context: Context, private val settings: AppSett
         const val SERVICE_LOG_CHARS = 300
     }
 }
+
+/** Starts reading the camera [device]; false if it could not be started. */
+fun StreamPipeline.startCamera(manager: UsbManager, device: UsbDevice): Boolean =
+    startCamera(androidOpener(manager, device), device.deviceName)
