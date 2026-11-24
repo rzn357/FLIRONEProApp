@@ -35,7 +35,7 @@ jobs:
 
       # --continue: every failing check is reported in one run, not only the first one.
       - name: Check, test and build
-        run: ./gradlew spotlessCheck detekt lintDebug testDebugUnitTest assembleDebug --continue --console=plain
+        run: ./gradlew spotlessCheck detekt lintDebug testDebugUnitTest :protocol:test :radiometry:test assembleDebug --continue --console=plain
 
       - name: Upload reports
         if: always()
@@ -43,8 +43,8 @@ jobs:
         with:
           name: reports
           path: |
-            app/build/reports/
-            app/build/test-results/
+            */build/reports/
+            */build/test-results/
           if-no-files-found: ignore
           retention-days: 14
 

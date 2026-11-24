@@ -1,7 +1,7 @@
 package com.exciteddev.flironepro.protocol
 
 /** The Lepton packet: 4 service bytes and 80 sixteen-bit pixels. The thermal block of a frame is a sequence of them. */
-internal object LeptonPacket {
+object LeptonPacket {
     const val BYTES_PER_PIXEL = 2
     const val HEADER = 4
     const val PIXELS = 80

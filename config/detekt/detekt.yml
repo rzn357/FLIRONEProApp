@@ -7,6 +7,7 @@ style:
   MagicNumber:
     excludes:
       - '**/test/**'
+      - '**/testFixtures/**'
       - '**/androidTest/**'
       # Canvas drawing and palette tables: coordinates, fractions of the canvas, colors. There the numbers are the content
       # itself, and a constant like PADDING_TOP = 12 would only hide them. (Screen layout is not here: sizes and colors of the

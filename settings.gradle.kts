@@ -24,3 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "FLIR ONE Pro App"
 include(":app")
+include(":protocol")
+include(":radiometry")

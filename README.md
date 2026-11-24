@@ -102,13 +102,21 @@ flowchart LR
 
 ### Packages
 
-The code is in `app/src/main/java/com/exciteddev/flironepro/`, split by layer (the unit tests follow the same layout). Dependencies go one way, from `ui` down to `protocol`, with no cycles between packages:
+The code is split into three Gradle modules, and inside `:app` by layer (the unit tests follow the same layout). Dependencies go one way, from `ui` down to `protocol`, with no cycles:
+
+| Module | Contents |
+|---|---|
+| `:protocol` | The wire format. A plain Kotlin/JVM module with no other module and no Android SDK on its classpath. |
+| `:radiometry` | The temperature model and thermal-image decoding. A plain Kotlin/JVM module that depends only on `:protocol` (and coroutines). |
+| `:app` | Everything else: USB, pipeline, rendering, media, settings and the screen. Depends on both. |
+
+The compiler enforces the boundary: code in `:protocol` or `:radiometry` that mentions `android.*`, USB or the screen does not compile, and `:protocol` cannot reach `:radiometry` (or the other way round into `:app`). The packages:
 
 | Package | Contents |
 |---|---|
 | `usb` | The camera over USB: `FlirCamera`, `FlirUsb`, `FlirReaders`, `ServiceChannel`, descriptor parsing and the USB report. |
-| `protocol` | The wire format with no USB or Android dependency: frame and message parsers, commands, telemetry packets. |
-| `radiometry` | The temperature model: `Radiometry`, `TempCalibration`, `ShutterCalibration`, `FfcTracker`, `ThermalImage`. |
+| `protocol` | (module `:protocol`) The wire format with no USB or Android dependency: frame and message parsers, commands, telemetry packets. |
+| `radiometry` | (module `:radiometry`) The temperature model: `Radiometry`, `TempCalibration`, `ShutterCalibration`, `FfcTracker`, `ThermalImage`. |
 | `pipeline` | Frames from the camera to the picture: `StreamPipeline`, `FrameIntake`, `FrameStore`, `FrameProcessor`, `PictureRenderer`. It hands the finished picture to a `PictureSink` (the screen's view is attached to it through a `DetachableSink` for as long as the screen exists) and knows nothing about the screen. |
 | `render` | Drawing: `ImageComposer`, `OverlayPainter`, `Palettes`, `ViewTransform`, the overlay texts. |
 | `media` | Saving photos and recording video. |
@@ -147,7 +155,7 @@ in non-Latin letters see [the Gradle note](#gradle-and-a-user-name-with-non-lati
 ## Tests
 
 ```
-./gradlew testDebugUnitTest      # 111 unit tests, run on the development machine, no device needed
+./gradlew testDebugUnitTest :protocol:test :radiometry:test   # 120 unit tests, run on the development machine, no device needed
 ./gradlew lintDebug              # Android lint
 ./gradlew spotlessCheck detekt   # code style and code smells (see below)
 ```
@@ -243,7 +251,7 @@ Both must report no problems before code is committed. The detekt settings are i
 > `dev.detekt`). It was chosen on purpose to get the new rule set and support for current Kotlin and AGP. Rules and
 > their names may still change before 2.0 is released, so bumping the version can bring new findings; the version is
 > set in `gradle/libs.versions.toml`.
-The unit tests run with `./gradlew testDebugUnitTest`; they are not part of the commit check.
+The unit tests run with `./gradlew testDebugUnitTest :protocol:test :radiometry:test` (`:app` and the two JVM modules have differently named test tasks); they are not part of the commit check.
 
 ### Git hooks
 
@@ -285,7 +293,7 @@ The hook can be skipped (`--no-verify`) and is local to each clone, so the same 
 workflow `.github/workflows/ci.yml`. It runs on every push to `main` and on every pull request, and executes
 
 ```
-./gradlew spotlessCheck detekt lintDebug testDebugUnitTest assembleDebug --continue
+./gradlew spotlessCheck detekt lintDebug testDebugUnitTest :protocol:test :radiometry:test assembleDebug --continue
 ```
 
 that is, both linters, Android lint, the unit tests and a debug build. `--continue` makes one run report every failing
