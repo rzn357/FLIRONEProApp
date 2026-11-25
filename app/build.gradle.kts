@@ -49,9 +49,11 @@ android {
         }
         release {
             if (signingStoreFile != null) signingConfig = signingConfigs.getByName("release")
+            // R8 shrinks and optimizes. Not "packageScope" for the libraries: with kotlin.** in it R8 moved some stdlib
+            // classes into the root package while their package-private base classes stayed in kotlin.collections,
+            // and the release build crashed at start with IllegalAccessError.
             optimization {
                 enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
             }
         }
     }
