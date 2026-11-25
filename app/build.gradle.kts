@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.detekt)
@@ -21,12 +23,42 @@ android {
         applicationId = "com.exciteddev.flironepro"
         minSdk = 29
         targetSdk = 37
+        // versionCode must grow with every release (Android refuses to update to a lower or equal one).
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
+    }
+
+    // Release signing. The key is never in the repository: the settings come from keystore.properties in the project
+    // root or from the file named by the environment variable FLIRONE_KEYSTORE_PROPERTIES (the release workflow writes
+    // one from GitHub secrets). Without them the release build stays unsigned, so clones and pull requests still build.
+    val signingProperties = Properties()
+    providers
+        .environmentVariable("FLIRONE_KEYSTORE_PROPERTIES")
+        .map { File(it) }
+        .orElse(rootProject.file("keystore.properties"))
+        .get()
+        .takeIf { it.isFile }
+        ?.inputStream()
+        ?.use(signingProperties::load)
+    val hasReleaseKey = signingProperties.containsKey("storeFile")
+    if (hasReleaseKey) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(signingProperties.getProperty("storeFile"))
+                storePassword = signingProperties.getProperty("storePassword")
+                keyAlias = signingProperties.getProperty("keyAlias")
+                keyPassword = signingProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            // A different package from the release build, so both can be installed side by side (their signing keys differ).
+            applicationIdSuffix = ".debug"
+        }
         release {
+            if (hasReleaseKey) signingConfig = signingConfigs.getByName("release")
             optimization {
                 enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")

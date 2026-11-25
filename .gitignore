@@ -9,3 +9,8 @@
 .cxx
 local.properties
 .kotlin/
+
+# Release signing keys and their settings must never be committed
+*.jks
+*.keystore
+keystore.properties
