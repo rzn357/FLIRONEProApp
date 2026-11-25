@@ -137,6 +137,19 @@ The compiler enforces the boundary: code in `:protocol` or `:radiometry` that me
   reference ("anchor") for the following frames. Sensor drift is compensated with the sensor's own temperature from the
   telemetry. The model was fitted and checked against a thermocouple (see [Limitations](#limitations) for the accuracy).
 
+## Install
+
+1. Download `FLIRONEPro-vX.Y.Z.apk` from the [latest release](https://github.com/rzn357/FLIRONEProApp/releases/latest).
+2. Optional: check the file against `FLIRONEPro-vX.Y.Z.apk.sha256` from the same page
+   (`sha256sum -c FLIRONEPro-vX.Y.Z.apk.sha256` on Linux and macOS, `certutil -hashfile <file> SHA256` on Windows).
+3. Open the APK on the phone and allow installing from this source when Android asks. The app is not in any store, so
+   Android shows its usual warning for apps from outside Google Play.
+4. Plug the camera into the USB-C port; Android offers to open the app and asks for USB permission.
+
+Requirements: Android 10 (API 29) or newer and a phone with USB host support (USB-C OTG).
+Updates are installed over the old version without losing the settings, as long as they come from this repository
+(every release is signed with the same key).
+
 ## Build
 
 Requirements: Android Studio (or a JDK 25, the version set in `gradle/gradle-daemon-jvm.properties`, with the Gradle wrapper) and Android SDK 37. The app needs Android 10 (API 29)
@@ -149,13 +162,17 @@ cd FLIRONEProApp
 ./gradlew installDebug           # installs on a connected device
 ```
 
+The debug build has the package name `com.exciteddev.flironepro.debug`, so it can be installed next to the released app
+(they are signed with different keys and could not replace each other). `./gradlew assembleRelease` builds the release
+APK; without a signing key (see [Releases](#releases)) it is left unsigned.
+
 Plug the camera into the phone; Android offers to open the app and asks for USB permission. On Windows with a user name
 in non-Latin letters see [the Gradle note](#gradle-and-a-user-name-with-non-latin-letters-windows).
 
 ## Tests
 
 ```
-./gradlew testDebugUnitTest :protocol:test :radiometry:test   # 120 unit tests, run on the development machine, no device needed
+./gradlew testDebugUnitTest :protocol:test :radiometry:test   # 162 unit tests, run on the development machine, no device needed
 ./gradlew lintDebug              # Android lint
 ./gradlew spotlessCheck detekt   # code style and code smells (see below)
 ```
@@ -182,7 +199,7 @@ the `DevTools` and `ReplaySource` interfaces in `main`.
   it calibrate on demand is not documented anywhere; the app searches for it on the camera, and so far it has not been found.
   The rest of the app does not depend on it.
 - **Resolution.** The thermal sensor has only 160×120 pixels; the picture is enlarged smoothly, which adds no detail.
-- **Not distributed.** No release signing and no store listing; build it yourself.
+- **Not in a store.** The signed APK is published only here, on the Releases page; there is no Google Play or F-Droid listing.
 
 ## Credits
 
@@ -299,6 +316,23 @@ workflow `.github/workflows/ci.yml`. It runs on every push to `main` and on ever
 that is, both linters, Android lint, the unit tests and a debug build. `--continue` makes one run report every failing
 check instead of stopping at the first. The badge at the top of this file shows the state of the last run on `main`.
 The lint and test reports and the debug APK are attached to each run as artifacts (kept for 14 days).
+
+### Releases
+
+A release is an APK signed with the project's key, built by the workflow `.github/workflows/release.yml`.
+
+- **The key** (`*.jks`) and its settings (`keystore.properties`) are never committed (they are in `.gitignore`). Keep at
+  least two backups of the keystore and its passwords: an update can only be installed over the old version if it is signed
+  with the same key, and the key cannot be recreated. `app/build.gradle.kts` reads the settings from `keystore.properties`
+  in the project root or from the file named by the environment variable `FLIRONE_KEYSTORE_PROPERTIES`. Without them the
+  release build is unsigned. The workflow gets the key from the repository secrets `KEYSTORE_BASE64` (the keystore, base64),
+  `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`.
+- **To make a release:** raise `versionCode` (it must grow with every release) and set `versionName` in
+  `app/build.gradle.kts`; add a `## [X.Y.Z]` section to `CHANGELOG.md`; merge to `main`; then
+  `git tag -a vX.Y.Z -m "FLIR ONE Pro X.Y.Z"` and `git push origin vX.Y.Z`.
+- **What the workflow does:** checks that the tag, `versionName` and the changelog agree, runs the checks and the tests,
+  builds and signs the APK, verifies the signature, and creates a **draft** release with the APK, its SHA-256 and the R8
+  mapping file. Try the APK from the draft on a phone, then publish the draft.
 
 ### Gradle and a user name with non-Latin letters (Windows)
 
