@@ -321,12 +321,13 @@ The lint and test reports and the debug APK are attached to each run as artifact
 
 A release is an APK signed with the project's key, built by the workflow `.github/workflows/release.yml`.
 
-- **The key** (`*.jks`) and its settings (`keystore.properties`) are never committed (they are in `.gitignore`). Keep at
-  least two backups of the keystore and its passwords: an update can only be installed over the old version if it is signed
-  with the same key, and the key cannot be recreated. `app/build.gradle.kts` reads the settings from `keystore.properties`
-  in the project root or from the file named by the environment variable `FLIRONE_KEYSTORE_PROPERTIES`. Without them the
-  release build is unsigned. The workflow gets the key from the repository secrets `KEYSTORE_BASE64` (the keystore, base64),
-  `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`.
+- **The key** (`*.jks`) is never committed (keystores are in `.gitignore`) and lives outside the repository, for example in
+  `~/.android/`. Keep at least two backups of the keystore and its passwords: an update can only be installed over the old
+  version if it is signed with the same key, and the key cannot be recreated. The settings are the Gradle properties
+  `flirone.signing.storeFile`, `flirone.signing.storePassword`, `flirone.signing.keyAlias` and `flirone.signing.keyPassword`
+  in the user-level `~/.gradle/gradle.properties` (not the project's one). Without them the release build is unsigned.
+  The workflow gets the key from the repository secrets `KEYSTORE_BASE64` (the keystore, base64), `KEYSTORE_PASSWORD`,
+  `KEY_ALIAS` and `KEY_PASSWORD` and writes the same properties on the runner.
 - **To make a release:** raise `versionCode` (it must grow with every release) and set `versionName` in
   `app/build.gradle.kts`; add a `## [X.Y.Z]` section to `CHANGELOG.md`; merge to `main`; then
   `git tag -a vX.Y.Z -m "FLIR ONE Pro X.Y.Z"` and `git push origin vX.Y.Z`.

@@ -39,8 +39,8 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      # The key comes from repository secrets and is written outside the checkout; build.gradle.kts finds it through
-      # FLIRONE_KEYSTORE_PROPERTIES.
+      # The key comes from repository secrets and is written outside the checkout. The settings go into the user-level
+      # gradle.properties as flirone.signing.*, the same place they have on the maintainer's machine.
       - name: Prepare the signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -53,13 +53,14 @@ jobs:
             exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          gradle_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
+          mkdir -p "$gradle_home"
           {
-            echo "storeFile=$RUNNER_TEMP/release.jks"
-            echo "storePassword=$KEYSTORE_PASSWORD"
-            echo "keyAlias=$KEY_ALIAS"
-            echo "keyPassword=$KEY_PASSWORD"
-          } > "$RUNNER_TEMP/keystore.properties"
-          echo "FLIRONE_KEYSTORE_PROPERTIES=$RUNNER_TEMP/keystore.properties" >> "$GITHUB_ENV"
+            echo "flirone.signing.storeFile=$RUNNER_TEMP/release.jks"
+            echo "flirone.signing.storePassword=$KEYSTORE_PASSWORD"
+            echo "flirone.signing.keyAlias=$KEY_ALIAS"
+            echo "flirone.signing.keyPassword=$KEY_PASSWORD"
+          } >> "$gradle_home/gradle.properties"
 
       - name: Check, test and build the release
         run: ./gradlew spotlessCheck detekt lintRelease testDebugUnitTest :protocol:test :radiometry:test assembleRelease --console=plain
