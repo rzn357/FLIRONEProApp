@@ -1,11 +1,18 @@
+<div align="center">
+
+<img src="docs/logo.png" alt="App icon: a hand in thermal colors inside a viewfinder, with the text FLIR ONE PRO" width="160">
+
 # FLIR ONE Pro for Android: an independent thermal-camera viewer
 
+[![Release](https://img.shields.io/github/v/release/rzn357/FLIRONEProApp?display_name=tag)](https://github.com/rzn357/FLIRONEProApp/releases/latest)
 [![CI](https://github.com/rzn357/FLIRONEProApp/actions/workflows/ci.yml/badge.svg)](https://github.com/rzn357/FLIRONEProApp/actions/workflows/ci.yml)
 [![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)](LICENSE)
 [![Platform: Android 10+](https://img.shields.io/badge/platform-Android%2010%2B%20(API%2029)-3DDC84?logo=android&logoColor=white)](#build)
 [![Language: Kotlin](https://img.shields.io/badge/language-Kotlin-7F52FF?logo=kotlin&logoColor=white)](app/src)
 [![Code style: detekt](https://img.shields.io/badge/code%20style-detekt-informational)](#code-quality-checks)
 [![Last commit](https://img.shields.io/github/last-commit/rzn357/FLIRONEProApp)](https://github.com/rzn357/FLIRONEProApp/commits/main)
+
+</div>
 
 An Android app (Kotlin) that shows the live picture of a **FLIR ONE Pro** thermal camera (USB-C) and measures temperatures
 with it. The camera is driven by **its own USB driver** written from scratch on top of Android's USB host API: no vendor
