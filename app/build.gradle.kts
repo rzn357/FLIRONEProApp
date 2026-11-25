@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.detekt)
@@ -28,26 +26,18 @@ android {
         versionName = "1.0.0"
     }
 
-    // Release signing. The key is never in the repository: the settings come from keystore.properties in the project
-    // root or from the file named by the environment variable FLIRONE_KEYSTORE_PROPERTIES (the release workflow writes
-    // one from GitHub secrets). Without them the release build stays unsigned, so clones and pull requests still build.
-    val signingProperties = Properties()
-    providers
-        .environmentVariable("FLIRONE_KEYSTORE_PROPERTIES")
-        .map { File(it) }
-        .orElse(rootProject.file("keystore.properties"))
-        .get()
-        .takeIf { it.isFile }
-        ?.inputStream()
-        ?.use(signingProperties::load)
-    val hasReleaseKey = signingProperties.containsKey("storeFile")
-    if (hasReleaseKey) {
+    // Release signing. The key is never in the repository: the settings are the Gradle properties flirone.signing.*
+    // (storeFile, storePassword, keyAlias, keyPassword) from ~/.gradle/gradle.properties; the release workflow writes the
+    // same file from GitHub secrets. Without them the release build stays unsigned, so clones and pull requests still build.
+    fun signingProperty(name: String) = providers.gradleProperty("flirone.signing.$name").orNull
+    val signingStoreFile = signingProperty("storeFile")
+    if (signingStoreFile != null) {
         signingConfigs {
             create("release") {
-                storeFile = file(signingProperties.getProperty("storeFile"))
-                storePassword = signingProperties.getProperty("storePassword")
-                keyAlias = signingProperties.getProperty("keyAlias")
-                keyPassword = signingProperties.getProperty("keyPassword")
+                storeFile = file(signingStoreFile)
+                storePassword = signingProperty("storePassword")
+                keyAlias = signingProperty("keyAlias")
+                keyPassword = signingProperty("keyPassword")
             }
         }
     }
@@ -58,7 +48,7 @@ android {
             applicationIdSuffix = ".debug"
         }
         release {
-            if (hasReleaseKey) signingConfig = signingConfigs.getByName("release")
+            if (signingStoreFile != null) signingConfig = signingConfigs.getByName("release")
             optimization {
                 enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")

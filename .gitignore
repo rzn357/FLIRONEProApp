@@ -10,7 +10,6 @@
 local.properties
 .kotlin/
 
-# Release signing keys and their settings must never be committed
+# Release signing keys must never be committed
 *.jks
 *.keystore
-keystore.properties
